@@ -153,43 +153,56 @@ class BibliographyImporter(BaseImporter):
         return references, "\n\n".join(text_parts)
 
     def _parse_bibtex(self, file_path: Path) -> tuple[list[dict], str]:
-        """Parse un fichier BibTeX."""
+        """Parse un fichier BibTeX avec gestion des accolades imbriquées."""
         content = file_path.read_text(encoding="utf-8-sig")
         references = []
 
-        # Regex pour extraire les entrées
-        entry_pattern = re.compile(
-            r"@(\w+)\s*\{\s*([^,]+)\s*,\s*(.*?)\s*\}(?=\s*@|\s*$)",
-            re.DOTALL,
-        )
+        # Trouver toutes les entrées BibTeX
+        i = 0
+        while i < len(content):
+            # Chercher le début d'une entrée @type{
+            match = re.search(r"@(\w+)\s*\{", content[i:])
+            if not match:
+                break
 
-        field_pattern = re.compile(r"(\w+)\s*=\s*[{\"](.+?)[}\"]", re.DOTALL)
-
-        for match in entry_pattern.finditer(content):
+            entry_start = i + match.start()
             entry_type = match.group(1).lower()
-            cite_key = match.group(2).strip()
-            fields_str = match.group(3)
+            brace_start = i + match.end() - 1  # Position de l'accolade ouvrante
+
+            # Trouver l'accolade fermante correspondante (gérer l'imbrication)
+            brace_count = 1
+            j = brace_start + 1
+            while j < len(content) and brace_count > 0:
+                if content[j] == "{":
+                    brace_count += 1
+                elif content[j] == "}":
+                    brace_count -= 1
+                j += 1
+
+            if brace_count != 0:
+                # Accolades non équilibrées, passer à la suite
+                i = brace_start + 1
+                continue
+
+            # Extraire le contenu de l'entrée
+            entry_content = content[brace_start + 1 : j - 1]
+
+            # Extraire la clé de citation (premier élément avant la virgule)
+            cite_key_match = re.match(r"\s*([^,\s]+)\s*,", entry_content)
+            if cite_key_match:
+                cite_key = cite_key_match.group(1).strip()
+                fields_str = entry_content[cite_key_match.end() :]
+            else:
+                cite_key = ""
+                fields_str = entry_content
 
             ref = {"type": entry_type, "cite_key": cite_key}
 
-            for field_match in field_pattern.finditer(fields_str):
-                field_name = field_match.group(1).lower()
-                field_value = field_match.group(2).strip()
-
-                # Nettoyer les caractères LaTeX basiques
-                field_value = field_value.replace("\\&", "&")
-                field_value = field_value.replace("~", " ")
-
-                if field_name == "author":
-                    # Séparer les auteurs
-                    authors = [a.strip() for a in field_value.split(" and ")]
-                    ref["authors"] = authors
-                elif field_name == "keywords":
-                    ref["keywords"] = [k.strip() for k in field_value.split(",")]
-                else:
-                    ref[field_name] = field_value
+            # Parser les champs avec gestion des accolades imbriquées
+            ref.update(self._parse_bibtex_fields(fields_str))
 
             references.append(ref)
+            i = j
 
         # Créer le contenu texte
         text_parts = []
@@ -197,6 +210,79 @@ class BibliographyImporter(BaseImporter):
             text_parts.append(self._format_reference(ref))
 
         return references, "\n\n".join(text_parts)
+
+    def _parse_bibtex_fields(self, fields_str: str) -> dict:
+        """Parse les champs d'une entrée BibTeX."""
+        fields = {}
+
+        # Pattern pour trouver le début d'un champ: name =
+        field_start_pattern = re.compile(r"(\w+)\s*=\s*")
+
+        pos = 0
+        while pos < len(fields_str):
+            match = field_start_pattern.search(fields_str, pos)
+            if not match:
+                break
+
+            field_name = match.group(1).lower()
+            value_start = match.end()
+
+            # Déterminer le type de délimiteur (accolade ou guillemet)
+            while value_start < len(fields_str) and fields_str[value_start] in " \t\n":
+                value_start += 1
+
+            if value_start >= len(fields_str):
+                break
+
+            delimiter = fields_str[value_start]
+
+            if delimiter == "{":
+                # Trouver l'accolade fermante correspondante
+                brace_count = 1
+                j = value_start + 1
+                while j < len(fields_str) and brace_count > 0:
+                    if fields_str[j] == "{":
+                        brace_count += 1
+                    elif fields_str[j] == "}":
+                        brace_count -= 1
+                    j += 1
+                field_value = fields_str[value_start + 1 : j - 1]
+                pos = j
+            elif delimiter == '"':
+                # Trouver le guillemet fermant
+                j = value_start + 1
+                while j < len(fields_str):
+                    if fields_str[j] == '"' and fields_str[j - 1] != "\\":
+                        break
+                    j += 1
+                field_value = fields_str[value_start + 1 : j]
+                pos = j + 1
+            else:
+                # Valeur sans délimiteur (nombre ou macro)
+                end_match = re.search(r"[,}\s]", fields_str[value_start:])
+                if end_match:
+                    field_value = fields_str[value_start : value_start + end_match.start()]
+                    pos = value_start + end_match.start()
+                else:
+                    field_value = fields_str[value_start:]
+                    pos = len(fields_str)
+
+            # Nettoyer la valeur
+            field_value = field_value.strip()
+            field_value = re.sub(r"\s+", " ", field_value)  # Normaliser les espaces
+            field_value = field_value.replace("\\&", "&")
+            field_value = field_value.replace("~", " ")
+            field_value = re.sub(r"\\[a-zA-Z]+\{([^}]*)\}", r"\1", field_value)  # Enlever les commandes LaTeX simples
+
+            # Traiter selon le type de champ
+            if field_name == "author":
+                fields["authors"] = [a.strip() for a in field_value.split(" and ")]
+            elif field_name == "keywords":
+                fields["keywords"] = [k.strip() for k in field_value.split(",")]
+            else:
+                fields[field_name] = field_value
+
+        return fields
 
     def _parse_endnote(self, file_path: Path) -> tuple[list[dict], str]:
         """Parse un fichier EndNote (.enw)."""

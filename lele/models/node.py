@@ -78,39 +78,62 @@ class Node:
 
     @classmethod
     def get(cls, db, node_id: str) -> Optional["Node"]:
-        """Récupère un nœud par ID."""
-        cursor = db.execute("SELECT * FROM nodes WHERE id = ?", (node_id,))
+        """Récupère un nœud par ID avec son compte de références."""
+        cursor = db.execute(
+            """
+            SELECT n.*, COUNT(cr.id) as ref_count
+            FROM nodes n
+            LEFT JOIN code_references cr ON n.id = cr.node_id
+            WHERE n.id = ?
+            GROUP BY n.id
+            """,
+            (node_id,),
+        )
         row = cursor.fetchone()
         if row:
-            node = cls.from_row(dict(row))
-            # Compter les références
-            count = db.execute(
-                "SELECT COUNT(*) FROM code_references WHERE node_id = ?", (node_id,)
-            ).fetchone()[0]
-            node.reference_count = count
+            row_dict = dict(row)
+            ref_count = row_dict.pop("ref_count", 0)
+            node = cls.from_row(row_dict)
+            node.reference_count = ref_count
             return node
         return None
 
     @classmethod
     def get_all(cls, db, parent_id: Optional[str] = None) -> list["Node"]:
-        """Récupère tous les nœuds, optionnellement filtrés par parent."""
+        """Récupère tous les nœuds, optionnellement filtrés par parent.
+
+        Optimisé avec une seule requête JOIN pour éviter le problème N+1.
+        """
         if parent_id is None:
             cursor = db.execute(
-                "SELECT * FROM nodes WHERE parent_id IS NULL ORDER BY name"
+                """
+                SELECT n.*, COUNT(cr.id) as ref_count
+                FROM nodes n
+                LEFT JOIN code_references cr ON n.id = cr.node_id
+                WHERE n.parent_id IS NULL
+                GROUP BY n.id
+                ORDER BY n.name
+                """
             )
         else:
             cursor = db.execute(
-                "SELECT * FROM nodes WHERE parent_id = ? ORDER BY name", (parent_id,)
+                """
+                SELECT n.*, COUNT(cr.id) as ref_count
+                FROM nodes n
+                LEFT JOIN code_references cr ON n.id = cr.node_id
+                WHERE n.parent_id = ?
+                GROUP BY n.id
+                ORDER BY n.name
+                """,
+                (parent_id,),
             )
 
         nodes = []
         for row in cursor.fetchall():
-            node = cls.from_row(dict(row))
-            # Compter les références
-            count = db.execute(
-                "SELECT COUNT(*) FROM code_references WHERE node_id = ?", (node.id,)
-            ).fetchone()[0]
-            node.reference_count = count
+            row_dict = dict(row)
+            ref_count = row_dict.pop("ref_count", 0)
+            node = cls.from_row(row_dict)
+            node.reference_count = ref_count
             nodes.append(node)
         return nodes
 

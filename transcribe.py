@@ -104,13 +104,20 @@ Exemples:
         )
 
     # Transcrire
-    result = transcribe_audio(
-        str(audio_path),
-        model_name=args.model,
-        language=args.language,
-    )
+    try:
+        result = transcribe_audio(
+            str(audio_path),
+            model_name=args.model,
+            language=args.language,
+        )
+    except Exception as e:
+        print(f"Erreur lors de la transcription: {e}", file=sys.stderr)
+        sys.exit(1)
 
-    transcript = result["text"].strip()
+    transcript = result.get("text", "").strip()
+    if not transcript:
+        print("Attention: La transcription est vide.", file=sys.stderr)
+
     detected_language = result.get("language", "inconnu")
 
     print(f"\nLangue détectée: {detected_language}")

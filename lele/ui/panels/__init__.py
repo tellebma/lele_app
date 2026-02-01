@@ -1,8 +1,8 @@
-"""Panneaux de l'interface utilisateur."""
+"""Panneaux de l'interface utilisateur.
 
-from .sources import SourcesPanel
-from .nodes import NodesPanel
-from .coding import CodingPanel
-from .analysis import AnalysisPanel
+Note: Les panneaux sont actuellement intégrés dans main_window.py.
+Ce module est prévu pour une future refactorisation qui extrairait
+les panneaux en composants séparés.
+"""
 
-__all__ = ["SourcesPanel", "NodesPanel", "CodingPanel", "AnalysisPanel"]
+__all__ = []

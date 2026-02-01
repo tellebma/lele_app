@@ -395,7 +395,9 @@ class TranscriptionApp:
                 language=self.language
             )
 
-            transcript = result["text"].strip()
+            transcript = result.get("text", "").strip()
+            if not transcript:
+                raise ValueError("La transcription est vide ou a échoué")
             detected_lang = result.get("language", "inconnu")
 
             # Mettre à jour l'interface depuis le thread principal

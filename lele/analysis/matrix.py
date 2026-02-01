@@ -160,6 +160,9 @@ class MatrixAnalysis:
         """
         Crée une matrice cas × nœuds.
 
+        Compte les références de codage pour chaque combinaison cas/nœud
+        en utilisant les sources liées aux cas via la table links.
+
         Args:
             classification_id: ID de la classification des cas
             node_ids: Nœuds à inclure
@@ -179,13 +182,20 @@ class MatrixAnalysis:
         row_labels = [c.name for c in cases]
         col_labels = [n.name for n in nodes]
 
-        # Pour chaque cas, on suppose qu'il y a des sources liées
-        # Cela nécessiterait une table de liaison case-source
         for case in cases:
             row = []
+            # Récupérer les sources liées à ce cas
+            source_ids = case.get_linked_source_ids(self.db)
+
             for node in nodes:
-                # Placeholder - nécessite implémentation des liens case-source
-                row.append(0)
+                # Compter les codages pour ce nœud dans les sources liées
+                count = 0
+                for source_id in source_ids:
+                    refs = CodeReference.get_by_source_and_node(
+                        self.db, source_id, node.id
+                    )
+                    count += len(refs)
+                row.append(count)
             matrix.append(row)
 
         return {
@@ -206,9 +216,10 @@ class MatrixAnalysis:
         Crée une matrice valeurs d'attribut × nœuds.
 
         Utile pour voir comment les codages varient selon
-        les caractéristiques des cas.
+        les caractéristiques des cas. Agrège les codages de tous
+        les cas ayant une même valeur d'attribut.
         """
-        from ..models.case import Classification, Attribute
+        from ..models.case import Classification
 
         classification = Classification.get(self.db, classification_id)
         if not classification:
@@ -233,23 +244,36 @@ class MatrixAnalysis:
 
         for attr_value in attribute_values:
             row = []
-            # Trouver les cas avec cette valeur
+            # Trouver les cas avec cette valeur d'attribut
             cursor = self.db.execute(
                 "SELECT case_id FROM case_attributes WHERE attribute_id = ? AND value = ?",
                 (attribute_id, attr_value),
             )
             case_ids = [r["case_id"] for r in cursor.fetchall()]
 
+            # Récupérer toutes les sources liées à ces cas
+            all_source_ids = set()
+            for case_id in case_ids:
+                case = Case.get(self.db, case_id)
+                if case:
+                    all_source_ids.update(case.get_linked_source_ids(self.db))
+
             for node in nodes:
-                # Compter les codages pour ces cas
-                # Placeholder - nécessite liens case-source
-                row.append(0)
+                # Compter les codages pour ce nœud dans les sources des cas
+                count = 0
+                for source_id in all_source_ids:
+                    refs = CodeReference.get_by_source_and_node(
+                        self.db, source_id, node.id
+                    )
+                    count += len(refs)
+                row.append(count)
             matrix.append(row)
 
         return {
             "matrix": matrix,
             "row_labels": row_labels,
             "col_labels": col_labels,
+            "attribute_id": attribute_id,
             "node_ids": [n.id for n in nodes],
         }
 

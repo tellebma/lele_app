@@ -1,11 +1,14 @@
 """Moteur de recherche full-text."""
 
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Optional
 
 from ..models.source import Source
 from ..models.memo import Memo
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -99,8 +102,9 @@ class SearchEngine:
                     )
                 )
 
-        except Exception:
-            # Fallback: recherche simple
+        except Exception as e:
+            # Fallback: recherche simple si FTS échoue
+            logger.debug("FTS5 search failed, falling back to simple search: %s", e)
             results = self._search_sources_simple(query, source_types, limit)
 
         return results
@@ -175,8 +179,9 @@ class SearchEngine:
                     )
                 )
 
-        except Exception:
-            # Fallback simple
+        except Exception as e:
+            # Fallback simple si FTS échoue
+            logger.debug("FTS5 memo search failed, falling back to simple search: %s", e)
             pattern = re.compile(re.escape(query), re.IGNORECASE)
             for memo in Memo.get_all(self.db):
                 content = memo.content or ""

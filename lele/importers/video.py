@@ -171,7 +171,16 @@ class VideoImporter(BaseImporter):
                         if stream.get("codec_type") == "video":
                             metadata["width"] = stream.get("width")
                             metadata["height"] = stream.get("height")
-                            metadata["fps"] = eval(stream.get("r_frame_rate", "0/1"))
+                            # Parsing sécurisé du frame rate (évite eval())
+                            fps_str = stream.get("r_frame_rate", "0/1")
+                            try:
+                                if "/" in fps_str:
+                                    num, den = fps_str.split("/", 1)
+                                    metadata["fps"] = int(num) / int(den) if int(den) != 0 else 0
+                                else:
+                                    metadata["fps"] = float(fps_str)
+                            except (ValueError, ZeroDivisionError):
+                                metadata["fps"] = 0
                             metadata["codec"] = stream.get("codec_name")
                             break
                     if "format" in data:
