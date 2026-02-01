@@ -1,2 +1,34 @@
-openai-whisper>=20231117
+# Lele - Application d'analyse qualitative de données
+# Dépendances requises
+
+# Interface graphique
 tkinterdnd2>=0.3.0
+
+# Transcription audio
+openai-whisper>=20231117
+
+# Lecture de documents
+pypdf>=3.0.0
+python-docx>=0.8.11
+
+# Traitement d'images
+Pillow>=9.0.0
+
+# Traitement de données
+pandas>=1.5.0
+openpyxl>=3.0.0
+
+# Visualisations
+matplotlib>=3.6.0
+wordcloud>=1.8.0
+networkx>=3.0
+
+# Métadonnées audio
+mutagen>=1.45.0
+
+# OCR (optionnel)
+# pytesseract>=0.3.10
+
+# Traitement vidéo (optionnel)
+# moviepy>=1.0.3
+# opencv-python>=4.7.0
