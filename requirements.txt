@@ -1,1 +1,2 @@
 openai-whisper>=20231117
+tkinterdnd2>=0.3.0
