@@ -157,13 +157,15 @@ class RefiQdaImporter(BaseImporter):
 
     def _import_sources(self, zf, root, ns, project, stats):
         """Importe les sources depuis le projet REFI-QDA."""
-        sources_elem = root.find(".//Sources", ns) or root.findall(".//Source", ns)
-        if sources_elem is None:
-            sources_elem = root.findall(".//Source", ns)
+        # Chercher d'abord le conteneur Sources
+        sources_container = root.find(".//Sources", ns)
+        if sources_container is not None:
+            source_elems = sources_container.findall("Source", ns)
         else:
-            sources_elem = sources_elem.findall("Source", ns)
+            # Sinon, chercher directement les éléments Source
+            source_elems = root.findall(".//Source", ns)
 
-        for source_elem in sources_elem:
+        for source_elem in source_elems:
             try:
                 guid = source_elem.get("guid", "")
                 name = source_elem.get("name", "Unnamed")
@@ -247,15 +249,13 @@ class RefiQdaImporter(BaseImporter):
 
     def _import_codings(self, root, ns, project, stats):
         """Importe les références de codage depuis le projet REFI-QDA."""
-        codings_elem = root.find(".//Coding", ns) or root.findall(".//CodeRef", ns)
-
-        if codings_elem is None:
-            return
-
-        if hasattr(codings_elem, "findall"):
-            code_refs = codings_elem.findall("CodeRef", ns)
+        # Chercher d'abord le conteneur Coding
+        coding_container = root.find(".//Coding", ns)
+        if coding_container is not None:
+            code_refs = coding_container.findall("CodeRef", ns)
         else:
-            code_refs = codings_elem
+            # Sinon, chercher directement les éléments CodeRef
+            code_refs = root.findall(".//CodeRef", ns)
 
         for coding_elem in code_refs:
             try:

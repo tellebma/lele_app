@@ -215,7 +215,7 @@ class Project:
 
     @classmethod
     def open(cls, path: Path) -> "Project":
-        """Ouvre un projet existant."""
+        """Ouvre un projet existant avec validation des données."""
         if isinstance(path, str):
             path = Path(path)
 
@@ -223,7 +223,27 @@ class Project:
         if not meta_path.exists():
             raise FileNotFoundError(f"Projet non trouvé: {path}")
 
-        metadata = json.loads(meta_path.read_text())
+        try:
+            metadata = json.loads(meta_path.read_text())
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Fichier project.json corrompu: {e}")
+
+        # Validation des champs obligatoires
+        required_fields = ["id", "name", "created_at", "modified_at"]
+        missing_fields = [f for f in required_fields if f not in metadata]
+        if missing_fields:
+            raise ValueError(
+                f"Fichier project.json invalide. Champs manquants: {', '.join(missing_fields)}"
+            )
+
+        # Validation des types
+        if not isinstance(metadata.get("id"), str):
+            raise ValueError("Le champ 'id' doit être une chaîne de caractères")
+        if not isinstance(metadata.get("name"), str):
+            raise ValueError("Le champ 'name' doit être une chaîne de caractères")
+        if metadata.get("settings") is not None and not isinstance(metadata.get("settings"), dict):
+            raise ValueError("Le champ 'settings' doit être un dictionnaire")
+
         return cls(
             id=metadata["id"],
             name=metadata["name"],

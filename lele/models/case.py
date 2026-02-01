@@ -337,3 +337,30 @@ class Case:
         db.execute("DELETE FROM case_attributes WHERE case_id = ?", (self.id,))
         db.execute("DELETE FROM cases WHERE id = ?", (self.id,))
         db.commit()
+
+    def get_linked_source_ids(self, db) -> list[str]:
+        """Récupère les IDs des sources liées à ce cas via la table links."""
+        cursor = db.execute(
+            """
+            SELECT target_id FROM links
+            WHERE source_type = 'case' AND source_id = ? AND target_type = 'source'
+            UNION
+            SELECT source_id FROM links
+            WHERE target_type = 'case' AND target_id = ? AND source_type = 'source'
+            """,
+            (self.id, self.id),
+        )
+        return [row[0] for row in cursor.fetchall()]
+
+    def link_source(self, db, source_id: str, link_type: str = "contains"):
+        """Lie une source à ce cas."""
+        from datetime import datetime
+        link_id = str(uuid.uuid4())
+        db.execute(
+            """
+            INSERT INTO links (id, source_type, source_id, target_type, target_id, link_type, created_at)
+            VALUES (?, 'case', ?, 'source', ?, ?, ?)
+            """,
+            (link_id, self.id, source_id, link_type, datetime.now().isoformat()),
+        )
+        db.commit()

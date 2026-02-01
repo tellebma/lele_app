@@ -1,5 +1,6 @@
 """Modèle pour les sources de données."""
 
+import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -96,7 +97,6 @@ class Source:
 
     def to_dict(self) -> dict:
         """Convertit en dictionnaire pour la sérialisation."""
-        import json
         return {
             "id": self.id,
             "name": self.name,
@@ -111,7 +111,6 @@ class Source:
     @classmethod
     def from_row(cls, row: dict) -> "Source":
         """Crée une instance depuis une ligne de base de données."""
-        import json
         metadata = row["metadata"]
         if isinstance(metadata, str):
             metadata = json.loads(metadata) if metadata else {}
@@ -128,7 +127,6 @@ class Source:
 
     def save(self, db) -> "Source":
         """Sauvegarde la source dans la base de données."""
-        import json
         data = self.to_dict()
         db.execute(
             """

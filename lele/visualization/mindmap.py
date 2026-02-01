@@ -2,6 +2,7 @@
 
 import io
 import json
+import math
 from pathlib import Path
 from typing import Optional
 
@@ -95,8 +96,6 @@ class MindMapGenerator:
 
                 for i, child in enumerate(node.children):
                     angle = angle_start + (i + 0.5) * angle_step
-                    import math
-
                     child_x = center_x + child_radius * math.cos(math.radians(angle))
                     child_y = center_y + child_radius * math.sin(math.radians(angle))
 
@@ -123,8 +122,6 @@ class MindMapGenerator:
                 place_node(node, center_x, center_y, 0, 360, radius, 0)
             else:
                 angle = i * angle_per_root
-                import math
-
                 node_x = center_x + radius * 0.3 * math.cos(math.radians(angle))
                 node_y = center_y + radius * 0.3 * math.sin(math.radians(angle))
                 place_node(

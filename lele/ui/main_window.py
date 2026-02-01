@@ -655,8 +655,10 @@ class MainWindow:
             selected_text = self.content_text.get(sel_start, sel_end)
 
             # Convertir les indices tkinter en positions
-            start_pos = int(self.content_text.count("1.0", sel_start, "chars")[0])
-            end_pos = int(self.content_text.count("1.0", sel_end, "chars")[0])
+            start_count = self.content_text.count("1.0", sel_start, "chars")
+            end_count = self.content_text.count("1.0", sel_end, "chars")
+            start_pos = int(start_count[0]) if start_count else 0
+            end_pos = int(end_count[0]) if end_count else 0
 
             # Créer la référence de codage
             ref = CodeReference(
