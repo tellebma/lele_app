@@ -1,0 +1,9 @@
+# Lele - Dépendances pour version CPU uniquement
+# Utiliser ce fichier pour une installation légère (~500 MB)
+
+-r requirements.txt
+
+# PyTorch CPU (plus léger, ~150 MB)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchaudio

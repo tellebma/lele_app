@@ -1,0 +1,9 @@
+# Lele - Dépendances pour version GPU (CUDA)
+# Utiliser ce fichier pour accélération GPU (~2.5 GB)
+
+-r requirements.txt
+
+# PyTorch avec CUDA 12.1 (compatible avec la plupart des GPU récents)
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch
+torchaudio

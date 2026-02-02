@@ -1,9 +1,11 @@
 """Fenêtre principale de l'application Lele."""
 
+import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 from typing import Optional
+import traceback
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -11,12 +13,18 @@ try:
 except ImportError:
     DND_AVAILABLE = False
 
+from .. import get_logger
 from ..models.project import Project
 from ..models.source import Source, SourceType
 from ..models.node import Node
 from ..models.coding import CodeReference
 from ..models.memo import Memo
 from ..importers import get_importer
+from ..utils.settings import get_settings_manager
+from .dialogs import TranscriptionSettingsDialog, ImportProgressDialog
+
+# Logger pour ce module
+logger = get_logger("ui.main_window")
 
 
 class MainWindow:
@@ -37,6 +45,14 @@ class MainWindow:
         self.project: Optional[Project] = None
         self.current_source: Optional[Source] = None
         self.selected_node: Optional[Node] = None
+
+        # Gestionnaire de paramètres
+        self.settings_manager = get_settings_manager()
+
+        # Paramètres de transcription (chargés depuis les settings)
+        settings = self.settings_manager.settings
+        self.whisper_model = settings.whisper_model
+        self.whisper_language = settings.whisper_language
 
         # Configuration des styles
         self.setup_styles()
@@ -81,6 +97,12 @@ class MainWindow:
         file_menu.add_command(
             label="Ouvrir projet...", command=self.open_project, accelerator="Ctrl+O"
         )
+
+        # Sous-menu Projets récents
+        self.recent_menu = tk.Menu(file_menu, tearoff=0)
+        file_menu.add_cascade(label="Projets récents", menu=self.recent_menu)
+        self._update_recent_projects_menu()
+
         file_menu.add_command(
             label="Sauvegarder", command=self.save_project, accelerator="Ctrl+S"
         )
@@ -115,6 +137,14 @@ class MainWindow:
         analysis_menu.add_command(label="Nuage de mots", command=self.show_wordcloud)
         analysis_menu.add_command(label="Carte mentale", command=self.show_mindmap)
         analysis_menu.add_command(label="Sociogramme", command=self.show_sociogram)
+
+        # Menu Paramètres
+        settings_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Paramètres", menu=settings_menu)
+        settings_menu.add_command(
+            label="Transcription audio/vidéo...",
+            command=self.show_transcription_settings,
+        )
 
         # Menu Aide
         help_menu = tk.Menu(menubar, tearoff=0)
@@ -433,6 +463,81 @@ class MainWindow:
         self.root.bind("<Control-k>", lambda e: self.code_selection())
         self.root.bind("<Control-q>", lambda e: self.quit_app())
 
+    # --- Projets récents ---
+
+    def _update_recent_projects_menu(self):
+        """Met à jour le menu des projets récents."""
+        # Vider le menu actuel
+        self.recent_menu.delete(0, tk.END)
+
+        # Nettoyer les projets qui n'existent plus
+        self.settings_manager.clean_nonexistent_projects()
+
+        # Récupérer les projets récents
+        recent_projects = self.settings_manager.get_recent_projects()
+
+        if not recent_projects:
+            self.recent_menu.add_command(
+                label="(Aucun projet récent)",
+                state=tk.DISABLED,
+            )
+        else:
+            for i, project in enumerate(recent_projects):
+                path = project["path"]
+                name = project["name"]
+
+                # Raccourci clavier pour les 9 premiers
+                accelerator = f"Ctrl+{i + 1}" if i < 9 else ""
+
+                self.recent_menu.add_command(
+                    label=f"{name}",
+                    command=lambda p=path: self._open_recent_project(p),
+                    accelerator=accelerator,
+                )
+
+            # Séparateur et option pour effacer
+            self.recent_menu.add_separator()
+            self.recent_menu.add_command(
+                label="Effacer la liste",
+                command=self._clear_recent_projects,
+            )
+
+    def _open_recent_project(self, path: str):
+        """Ouvre un projet récent."""
+        project_path = Path(path)
+
+        if not project_path.exists():
+            messagebox.showerror(
+                "Erreur",
+                f"Le projet n'existe plus:\n{path}",
+            )
+            self.settings_manager.remove_recent_project(path)
+            self._update_recent_projects_menu()
+            return
+
+        try:
+            self.project = Project.open(project_path)
+            self.refresh_all()
+            self.update_status(f"Projet ouvert: {self.project.name}")
+            self.project_label.configure(text=self.project.name)
+
+            # Mettre à jour les projets récents (le met en tête)
+            self.settings_manager.add_recent_project(path)
+            self._update_recent_projects_menu()
+
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d'ouvrir le projet: {e}")
+            logger.error(f"Erreur ouverture projet récent: {e}")
+
+    def _clear_recent_projects(self):
+        """Efface la liste des projets récents."""
+        if messagebox.askyesno(
+            "Confirmer",
+            "Effacer la liste des projets récents?",
+        ):
+            self.settings_manager.clear_recent_projects()
+            self._update_recent_projects_menu()
+
     # --- Actions du menu ---
 
     def new_project(self):
@@ -473,6 +578,11 @@ class MainWindow:
                 self.refresh_all()
                 self.update_status(f"Projet créé: {name}")
                 self.project_label.configure(text=name)
+
+                # Ajouter aux projets récents
+                self.settings_manager.add_recent_project(project_path)
+                self._update_recent_projects_menu()
+
                 dialog.destroy()
             except Exception as e:
                 messagebox.showerror("Erreur", f"Erreur lors de la création: {e}")
@@ -488,6 +598,11 @@ class MainWindow:
                 self.refresh_all()
                 self.update_status(f"Projet ouvert: {self.project.name}")
                 self.project_label.configure(text=self.project.name)
+
+                # Ajouter aux projets récents
+                self.settings_manager.add_recent_project(path)
+                self._update_recent_projects_menu()
+
             except Exception as e:
                 messagebox.showerror("Erreur", f"Impossible d'ouvrir le projet: {e}")
 
@@ -521,35 +636,196 @@ class MainWindow:
 
     def import_files_list(self, files):
         """Importe une liste de fichiers."""
-        imported = 0
-        errors = []
+        # Vérifier si des fichiers audio/vidéo sont présents
+        audio_video_extensions = {
+            ".mp3", ".wav", ".m4a", ".flac", ".ogg", ".webm",
+            ".mp4", ".avi", ".mov", ".mkv", ".wmv",
+        }
 
-        for file_path in files:
+        has_audio_video = any(
+            Path(f).suffix.lower() in audio_video_extensions for f in files
+        )
+
+        # Afficher le dialogue de paramètres si audio/vidéo détecté
+        transcribe = True
+        whisper_model = self.whisper_model
+        whisper_language = self.whisper_language
+
+        if has_audio_video:
+            dialog = TranscriptionSettingsDialog(
+                self.root,
+                current_model=self.whisper_model,
+                current_language=self.whisper_language,
+                show_transcribe_option=True,
+            )
+            self.root.wait_window(dialog)
+
+            if dialog.cancelled:
+                return
+
+            transcribe = dialog.result_transcribe
+            whisper_model = dialog.result_model
+            whisper_language = dialog.result_language
+
+            # Sauvegarder les préférences
+            self.whisper_model = whisper_model
+            self.whisper_language = whisper_language
+
+        # Lancer l'import dans un thread séparé
+        self._start_async_import(
+            files, transcribe, whisper_model, whisper_language
+        )
+
+    def _start_async_import(
+        self,
+        files: list,
+        transcribe: bool,
+        whisper_model: str,
+        whisper_language: Optional[str],
+    ):
+        """Lance l'import de fichiers de manière asynchrone."""
+        logger.info(f"Démarrage de l'import de {len(files)} fichier(s)")
+
+        # Créer le dialogue de progression
+        progress_dialog = ImportProgressDialog(self.root, total_files=len(files))
+
+        def update_progress(progress: float, message: str):
+            """Callback pour mettre à jour la progression."""
+            if not progress_dialog.cancelled:
+                progress_dialog.after(
+                    0, lambda: progress_dialog.set_step(progress, message)
+                )
+
+        def do_import():
+            sources_to_save = []
+            errors = []
+            total = len(files)
+
+            for i, file_path in enumerate(files, 1):
+                # Vérifier si annulé
+                if progress_dialog.cancelled:
+                    logger.info("Import annulé par l'utilisateur")
+                    break
+
+                try:
+                    filename = Path(file_path).name
+                    progress_dialog.after(
+                        0, lambda f=filename, n=i: progress_dialog.set_file(f, n)
+                    )
+                    progress_dialog.after(
+                        0, lambda f=filename: progress_dialog.log(f"Import: {f}")
+                    )
+
+                    logger.info(f"Import du fichier: {file_path}")
+                    importer = get_importer(file_path)
+
+                    # Configurer le callback de progression
+                    importer.set_progress_callback(update_progress)
+
+                    # Déterminer si c'est un fichier audio/vidéo
+                    is_audio_video = Path(file_path).suffix.lower() in {
+                        ".mp3", ".wav", ".m4a", ".flac", ".ogg", ".webm",
+                        ".mp4", ".avi", ".mov", ".mkv", ".wmv",
+                    }
+
+                    # Préparer les options d'import
+                    import_options = {}
+                    if is_audio_video:
+                        import_options["transcribe"] = transcribe
+                        import_options["whisper_model"] = whisper_model
+                        import_options["language"] = whisper_language
+                        logger.info(
+                            f"Options transcription: model={whisper_model}, "
+                            f"lang={whisper_language}, transcribe={transcribe}"
+                        )
+                        progress_dialog.after(
+                            0,
+                            lambda: progress_dialog.log(
+                                f"  Transcription: modèle={whisper_model}"
+                            ),
+                        )
+
+                    result = importer.import_file(
+                        Path(file_path),
+                        self.project.files_path,
+                        **import_options,
+                    )
+
+                    if result.success and result.source:
+                        # Collecter la source pour la sauvegarder dans le thread principal
+                        sources_to_save.append(result.source)
+                        content_len = len(result.source.content or "")
+                        logger.info(f"Import réussi: {result.source.name} ({content_len} chars)")
+                        progress_dialog.after(
+                            0,
+                            lambda cl=content_len: progress_dialog.log(
+                                f"  ✓ Succès ({cl} caractères)"
+                            ),
+                        )
+
+                        # Afficher les avertissements
+                        if result.warnings:
+                            for warning in result.warnings:
+                                logger.warning(f"Avertissement: {warning}")
+                                progress_dialog.after(
+                                    0,
+                                    lambda w=warning: progress_dialog.log(f"  ⚠ {w}"),
+                                )
+                    else:
+                        error_msg = f"{filename}: {result.error}"
+                        errors.append(error_msg)
+                        logger.error(f"Échec de l'import: {error_msg}")
+                        progress_dialog.after(
+                            0,
+                            lambda e=result.error: progress_dialog.log(f"  ✗ Erreur: {e}"),
+                        )
+
+                except Exception as e:
+                    error_msg = f"{Path(file_path).name}: {e}"
+                    errors.append(error_msg)
+                    logger.error(f"Exception lors de l'import: {error_msg}")
+                    logger.error(traceback.format_exc())
+                    progress_dialog.after(
+                        0, lambda err=str(e): progress_dialog.log(f"  ✗ Exception: {err}")
+                    )
+
+            # Mise à jour de l'interface dans le thread principal
+            # Les sources seront sauvegardées dans le thread principal pour éviter
+            # les erreurs SQLite "objects created in a thread..."
+            self.root.after(
+                0, lambda: self._on_import_complete(sources_to_save, errors, progress_dialog)
+            )
+
+        thread = threading.Thread(target=do_import, daemon=True)
+        thread.start()
+
+    def _on_import_complete(self, sources: list, errors: list, progress_dialog: ImportProgressDialog):
+        """Callback appelé quand l'import est terminé."""
+        # Sauvegarder les sources dans le thread principal (évite les erreurs SQLite)
+        saved_count = 0
+        for source in sources:
             try:
-                importer = get_importer(file_path)
-                importer.set_progress_callback(
-                    lambda p, m: self.update_status(f"Import: {m} ({p*100:.0f}%)")
-                )
-
-                result = importer.import_file(
-                    Path(file_path),
-                    self.project.files_path,
-                )
-
-                if result.success and result.source:
-                    result.source.save(self.project.db)
-                    imported += 1
-                else:
-                    errors.append(f"{Path(file_path).name}: {result.error}")
-
+                source.save(self.project.db)
+                saved_count += 1
+                logger.info(f"Source sauvegardée: {source.name}")
+                progress_dialog.log(f"💾 Sauvegardé: {source.name}")
             except Exception as e:
-                errors.append(f"{Path(file_path).name}: {e}")
+                error_msg = f"{source.name}: {e}"
+                errors.append(error_msg)
+                logger.error(f"Erreur de sauvegarde: {error_msg}")
+                logger.error(traceback.format_exc())
+                progress_dialog.log(f"✗ Erreur sauvegarde: {source.name}")
 
         self.refresh_sources()
-        self.update_status(f"{imported} fichier(s) importé(s)")
+        self.update_status(f"{saved_count} fichier(s) importé(s)")
+        logger.info(f"Import terminé: {saved_count} fichier(s) importé(s)")
+
+        # Mettre à jour le dialogue de progression
+        progress_dialog.complete(saved_count, len(errors))
 
         if errors:
-            messagebox.showwarning("Erreurs d'import", "\n".join(errors))
+            error_text = "\n".join(errors)
+            logger.warning(f"Erreurs d'import:\n{error_text}")
 
     def on_files_drop(self, event):
         """Gère le drop de fichiers."""
@@ -920,6 +1196,30 @@ class MainWindow:
             "Supporte l'import de multiples formats, le codage,\n"
             "et diverses visualisations.",
         )
+
+    def show_transcription_settings(self):
+        """Affiche les paramètres de transcription."""
+        dialog = TranscriptionSettingsDialog(
+            self.root,
+            current_model=self.whisper_model,
+            current_language=self.whisper_language,
+            show_transcribe_option=False,
+        )
+        self.root.wait_window(dialog)
+
+        if not dialog.cancelled:
+            self.whisper_model = dialog.result_model
+            self.whisper_language = dialog.result_language
+
+            # Sauvegarder dans les settings
+            self.settings_manager.settings.whisper_model = self.whisper_model
+            self.settings_manager.settings.whisper_language = self.whisper_language
+            self.settings_manager.save()
+
+            lang_text = self.whisper_language or "auto"
+            self.update_status(
+                f"Paramètres de transcription: modèle={self.whisper_model}, langue={lang_text}"
+            )
 
     # --- Rafraîchissement de l'interface ---
 

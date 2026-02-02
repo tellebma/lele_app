@@ -1,11 +1,17 @@
 # Lele - Application d'analyse qualitative de données
 # Dépendances requises
+#
+# NOTE: Ce fichier contient les dépendances de base.
+# Pour le build PyInstaller, utilisez plutôt:
+#   - requirements-cpu.txt  (version légère, CPU uniquement)
+#   - requirements-cuda.txt (version GPU avec CUDA)
 
 # Interface graphique
 tkinterdnd2>=0.3.0
 
 # Transcription audio
 openai-whisper>=20231117
+imageio-ffmpeg>=0.4.9  # FFmpeg binaires inclus 
 
 # Lecture de documents
 pypdf>=3.0.0
@@ -25,6 +31,9 @@ networkx>=3.0
 
 # Métadonnées audio
 mutagen>=1.45.0
+
+# Informations système
+psutil>=5.9.0
 
 # OCR (optionnel)
 # pytesseract>=0.3.10

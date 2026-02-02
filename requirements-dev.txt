@@ -1,0 +1,15 @@
+# Lele - Dépendances de développement et build
+
+# Build
+pyinstaller>=6.0.0
+
+# Tests (optionnel)
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Linting (optionnel)
+ruff>=0.1.0
+black>=23.0.0
+
+# Type checking (optionnel)
+mypy>=1.0.0

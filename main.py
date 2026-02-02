@@ -10,8 +10,16 @@ import sys
 
 def main():
     """Lance l'application Lele."""
-    from lele.ui import MainWindow
+    # Initialiser le logging
+    from lele import setup_logging
+    setup_logging()
 
+    # Logger les informations système au démarrage
+    from lele.utils.system import log_system_info
+    log_system_info()
+
+    # Lancer l'interface
+    from lele.ui import MainWindow
     app = MainWindow()
     app.run()
 
