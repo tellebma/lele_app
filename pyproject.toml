@@ -1,0 +1,144 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lele"
+dynamic = ["version"]
+description = "Application d'analyse qualitative de données (QDA) inspirée de NVivo"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Lele Team"}
+]
+keywords = ["qda", "qualitative", "analysis", "nvivo", "coding", "research"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: X11 Applications",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+
+dependencies = [
+    "tkinterdnd2>=0.3.0",
+    "openai-whisper>=20231117",
+    "imageio-ffmpeg>=0.4.9",
+    "pypdf>=3.0.0",
+    "python-docx>=0.8.11",
+    "Pillow>=9.0.0",
+    "pandas>=1.5.0",
+    "openpyxl>=3.0.0",
+    "matplotlib>=3.6.0",
+    "wordcloud>=1.8.0",
+    "networkx>=3.0",
+    "mutagen>=1.45.0",
+    "psutil>=5.9.0",
+    "sentence-transformers>=2.2.0",
+    "umap-learn>=0.5.0",
+    "hdbscan>=0.8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pyinstaller>=6.0.0",
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "black>=23.0.0",
+    "mypy>=1.0.0",
+    "python-semantic-release>=9.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/tellebma/lele_app"
+Repository = "https://github.com/tellebma/lele_app"
+Issues = "https://github.com/tellebma/lele_app/issues"
+
+[project.scripts]
+lele = "lele.ui.main_window:main"
+
+[project.gui-scripts]
+lele-gui = "lele.ui.main_window:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "lele.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["lele*"]
+
+# =============================================================================
+# Semantic Release Configuration
+# =============================================================================
+[tool.semantic_release]
+version_toml = []
+version_variables = ["lele/__init__.py:__version__"]
+branch = "main"
+upload_to_pypi = false
+upload_to_release = true
+build_command = ""
+commit_message = "chore(release): {version} [skip ci]"
+
+[tool.semantic_release.changelog]
+changelog_file = "CHANGELOG.md"
+exclude_commit_patterns = [
+    "^chore\\(release\\):",
+    "^ci:",
+    "^docs:",
+    "^style:",
+]
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = [
+    "build",
+    "chore",
+    "ci",
+    "docs",
+    "feat",
+    "fix",
+    "perf",
+    "refactor",
+    "style",
+    "test",
+]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+
+# =============================================================================
+# Code Quality Tools
+# =============================================================================
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4"]
+ignore = ["E501"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"

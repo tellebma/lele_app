@@ -3,13 +3,16 @@
 # Build
 pyinstaller>=6.0.0
 
-# Tests (optionnel)
+# Semantic Release
+python-semantic-release>=9.0.0
+
+# Tests
 pytest>=7.0.0
 pytest-cov>=4.0.0
 
-# Linting (optionnel)
+# Linting
 ruff>=0.1.0
 black>=23.0.0
 
-# Type checking (optionnel)
+# Type checking
 mypy>=1.0.0

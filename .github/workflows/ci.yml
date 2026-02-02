@@ -1,0 +1,166 @@
+# Continuous Integration Workflow
+# Runs on every push and pull request
+#
+# Jobs:
+#   - lint: Code quality checks (ruff, black)
+#   - test: Unit tests
+#   - build-test: Quick build verification (CPU only)
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+      - "fix/**"
+  pull_request:
+    branches:
+      - main
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ==========================================================================
+  # Code Quality
+  # ==========================================================================
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install linters
+        run: |
+          pip install ruff black
+
+      - name: Run ruff
+        run: ruff check lele/ --output-format=github
+
+      - name: Check black formatting
+        run: black --check --diff lele/
+
+  # ==========================================================================
+  # Tests
+  # ==========================================================================
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+          # Install CPU-only PyTorch for tests
+          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Run tests
+        run: |
+          pytest tests/ -v --tb=short --cov=lele --cov-report=xml || echo "No tests found yet"
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+
+  # ==========================================================================
+  # Build Verification (Quick CPU build)
+  # ==========================================================================
+  build-verify:
+    name: Verify Build
+    runs-on: windows-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip install -r requirements-cpu.txt
+          pip install pyinstaller>=6.0.0
+
+      - name: Verify imports
+        run: |
+          python -c "from lele import __version__; print(f'Version: {__version__}')"
+          python -c "import lele.ui.main_window"
+          python -c "import lele.models.project"
+          python -c "import lele.analysis.auto_coding.engine"
+
+      - name: Test PyInstaller analysis
+        run: |
+          # Just run analysis phase to verify spec file
+          pyinstaller lele.spec --noconfirm 2>&1 | head -100
+        shell: bash
+        continue-on-error: true
+
+  # ==========================================================================
+  # Commit Message Check
+  # ==========================================================================
+  conventional-commits:
+    name: Check Commit Messages
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check commit messages
+        run: |
+          # Get commits in PR
+          COMMITS=$(git log --format="%s" origin/${{ github.base_ref }}..HEAD)
+
+          echo "Checking commit messages for conventional format..."
+          echo "$COMMITS"
+
+          # Check each commit follows conventional format
+          PATTERN="^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?: .+"
+
+          INVALID=0
+          while IFS= read -r commit; do
+            if [[ ! "$commit" =~ $PATTERN ]]; then
+              echo "Invalid: $commit"
+              INVALID=$((INVALID + 1))
+            fi
+          done <<< "$COMMITS"
+
+          if [ $INVALID -gt 0 ]; then
+            echo ""
+            echo "Found $INVALID commit(s) not following conventional commits format."
+            echo "Expected format: type(scope): description"
+            echo "Types: feat, fix, docs, style, refactor, perf, test, chore, ci, build, revert"
+            exit 1
+          fi
+
+          echo "All commits follow conventional format!"

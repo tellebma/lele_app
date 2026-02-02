@@ -1,0 +1,183 @@
+# Windows Build Workflow
+# Builds Windows executables for CPU and CUDA variants
+#
+# Artifacts:
+#   - Lele-{version}-Windows-CPU.zip (~500 MB)
+#   - Lele-{version}-Windows-CUDA.zip (~2.5 GB)
+
+name: Build Windows
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Version to build"
+        required: true
+        type: string
+      upload-to-release:
+        description: "Upload artifacts to GitHub release"
+        required: false
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (leave empty for current)"
+        required: false
+        type: string
+      upload-to-release:
+        description: "Upload artifacts to GitHub release"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ==========================================================================
+  # Build CPU Version
+  # ==========================================================================
+  build-cpu:
+    name: Build Windows CPU
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Get version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            VERSION=$(grep -oP '__version__ = "\K[^"]+' lele/__init__.py)
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install CPU dependencies
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip install -r requirements-cpu.txt
+          pip install pyinstaller>=6.0.0
+
+      - name: Verify environment
+        run: |
+          python -c "import torch; print(f'PyTorch: {torch.__version__}')"
+          python -c "import whisper; print('Whisper: OK')"
+          python -c "import imageio_ffmpeg; print(f'FFmpeg: {imageio_ffmpeg.get_ffmpeg_exe()}')"
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller lele.spec --noconfirm
+
+      - name: Create archive
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          Compress-Archive -Path "dist\Lele\*" -DestinationPath "Lele-$version-Windows-CPU.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lele-${{ steps.version.outputs.version }}-Windows-CPU
+          path: Lele-${{ steps.version.outputs.version }}-Windows-CPU.zip
+          retention-days: 30
+
+      - name: Upload to release
+        if: inputs.upload-to-release == true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "v${{ steps.version.outputs.version }}" "Lele-${{ steps.version.outputs.version }}-Windows-CPU.zip" --clobber
+
+  # ==========================================================================
+  # Build CUDA Version
+  # ==========================================================================
+  build-cuda:
+    name: Build Windows CUDA
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Get version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            VERSION=$(grep -oP '__version__ = "\K[^"]+' lele/__init__.py)
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install CUDA dependencies
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip install -r requirements-cuda.txt
+          pip install pyinstaller>=6.0.0
+
+      - name: Verify environment
+        run: |
+          python -c "import torch; print(f'PyTorch: {torch.__version__}, CUDA available: {torch.cuda.is_available()}')"
+          python -c "import whisper; print('Whisper: OK')"
+          python -c "import imageio_ffmpeg; print(f'FFmpeg: {imageio_ffmpeg.get_ffmpeg_exe()}')"
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller lele.spec --noconfirm
+
+      - name: Create archive
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          Compress-Archive -Path "dist\Lele\*" -DestinationPath "Lele-$version-Windows-CUDA.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lele-${{ steps.version.outputs.version }}-Windows-CUDA
+          path: Lele-${{ steps.version.outputs.version }}-Windows-CUDA.zip
+          retention-days: 30
+
+      - name: Upload to release
+        if: inputs.upload-to-release == true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "v${{ steps.version.outputs.version }}" "Lele-${{ steps.version.outputs.version }}-Windows-CUDA.zip" --clobber
+
+  # ==========================================================================
+  # Summary
+  # ==========================================================================
+  summary:
+    name: Build Summary
+    needs: [build-cpu, build-cuda]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Summary
+        run: |
+          echo "## Windows Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Variant | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| CPU | ${{ needs.build-cpu.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| CUDA | ${{ needs.build-cuda.result }} |" >> $GITHUB_STEP_SUMMARY
