@@ -6,6 +6,14 @@ import math
 from pathlib import Path
 from typing import Optional
 
+# Imports matplotlib (optionnels)
+try:
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+
 from ..models.node import Node
 from ..models.coding import CodeReference
 
@@ -35,11 +43,7 @@ class MindMapGenerator:
         Returns:
             Image PNG en bytes
         """
-        try:
-            import matplotlib.pyplot as plt
-            import matplotlib.patches as patches
-            import numpy as np
-        except ImportError:
+        if not MATPLOTLIB_AVAILABLE:
             return None
 
         if root_node_id:
@@ -176,7 +180,7 @@ class MindMapGenerator:
             size = max(size, 40)
 
             # Dessiner le cercle
-            circle = plt.Circle(
+            circle = mpatches.Circle(
                 pos,
                 size / 2,
                 color=node.color,

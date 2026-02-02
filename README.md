@@ -25,11 +25,23 @@ python main.py
 - **Bibliographie** : RIS, BibTeX, EndNote
 - **Interopérabilité** : Import/Export REFI-QDA (.qdpx)
 
+### Transcription audio automatique
+- Moteur Whisper (OpenAI) intégré
+- Choix du modèle (tiny → large)
+- Détection automatique de la langue
+- Support GPU (CUDA/Apple Silicon)
+
 ### Codage et analyse
-- Création de nœuds (codes) hiérarchiques
+- Création de nœuds (codes) hiérarchiques avec couleurs
 - Codage de passages de texte
 - Mémos et annotations
 - Cas et classifications avec attributs personnalisés
+
+### Détection automatique de thèmes (Auto-codage)
+- Analyse NLP avec sentence-transformers
+- Clustering automatique (UMAP + HDBSCAN)
+- Nommage des thèmes via LLM local (Ollama) ou mots-clés
+- Prévisualisation et validation avant création
 
 ### Visualisations
 - Nuage de mots
@@ -53,15 +65,30 @@ python main.py
 
 ### 3. Créer des codes
 - Clic sur `+` dans le panneau Nœuds
+- Ou clic droit sur un nœud > "Ajouter un sous-nœud"
 - Définir nom, couleur et description
 
 ### 4. Coder du texte
+**Méthode classique :**
 1. Sélectionner une source
 2. Sélectionner un nœud
 3. Surligner le texte à coder
 4. `Ctrl+K` ou bouton "Coder"
 
-### 5. Visualiser
+**Méthode rapide :**
+- Surligner du texte → clic droit → "Coder avec" → choisir un nœud
+- Ou double-clic sur un nœud (avec du texte sélectionné)
+
+**Créer et coder en même temps :**
+- Surligner du texte → `Ctrl+Shift+K` → le nom est pré-rempli
+
+### 5. Détection automatique
+- Cliquer sur "🔮 Auto" dans le panneau Nœuds
+- Ou `Codage > Détection automatique de nœuds`
+- Sélectionner les sources à analyser
+- Valider les thèmes proposés
+
+### 6. Visualiser
 Menu `Analyse` > choisir une visualisation
 
 ## Raccourcis clavier
@@ -72,8 +99,26 @@ Menu `Analyse` > choisir une visualisation
 | `Ctrl+O` | Ouvrir projet |
 | `Ctrl+S` | Sauvegarder |
 | `Ctrl+K` | Coder la sélection |
+| `Ctrl+Shift+N` | Nouveau nœud |
+| `Ctrl+Shift+K` | Créer nœud depuis sélection et coder |
 | `Ctrl+F` | Rechercher |
+| `F2` | Renommer le nœud sélectionné |
+| `Suppr` | Supprimer le nœud sélectionné |
 | `Ctrl+Q` | Quitter |
+
+## Menus contextuels (clic droit)
+
+### Sur le texte
+- 🏷️ Coder avec... (liste des nœuds)
+- ➕ Nouveau nœud depuis la sélection
+- 📋 Copier
+- 🔍 Rechercher
+
+### Sur un nœud
+- ✏️ Renommer
+- 🎨 Changer la couleur
+- ➕ Ajouter un sous-nœud
+- 🗑️ Supprimer
 
 ## Structure d'un projet
 
@@ -83,6 +128,26 @@ mon_projet/
 ├── project.db      # Base de données SQLite
 └── files/          # Fichiers importés
 ```
+
+## Configuration IA (optionnel)
+
+Pour utiliser le nommage automatique des thèmes via LLM local :
+
+1. Installer [Ollama](https://ollama.ai)
+2. Télécharger un modèle : `ollama pull mistral`
+3. Dans Lele : `Paramètres > IA / LLM local`
+4. Configurer l'URL et le modèle
+
+Sans Ollama, les thèmes sont nommés par extraction de mots-clés.
+
+## Dépendances principales
+
+- Python 3.10+
+- tkinter / tkinterdnd2 (interface)
+- openai-whisper (transcription)
+- sentence-transformers (embeddings)
+- umap-learn, hdbscan (clustering)
+- matplotlib, wordcloud, networkx (visualisations)
 
 ## Licence
 

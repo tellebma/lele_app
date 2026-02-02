@@ -29,6 +29,18 @@ class AppSettings:
     # Paramètres de transcription
     whisper_model: str = "medium"
     whisper_language: Optional[str] = None
+    transcription_show_timestamps: bool = False
+
+    # Paramètres LLM local (pour auto-codage)
+    llm_provider: str = "ollama"  # "ollama", "none"
+    llm_model: str = "mistral"
+    ollama_url: str = "http://localhost:11434"
+
+    # Paramètres d'auto-codage
+    autocoding_embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
+    autocoding_max_themes: int = 15
+    autocoding_min_cluster_size: int = 3
+    autocoding_confidence_threshold: float = 0.6
 
     # Interface
     window_width: int = 1400

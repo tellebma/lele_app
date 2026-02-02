@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"%USERPROFILE%\\\\.lele\\\\logs\"\" 2>nul || echo \"Dossier logs non trouvé \")",
+      "Bash(python -m py_compile:*)"
+    ]
+  }
+}

@@ -35,6 +35,15 @@ mutagen>=1.45.0
 # Informations système
 psutil>=5.9.0
 
+# Auto-codage / Détection automatique de nœuds
+sentence-transformers>=2.2.0
+umap-learn>=0.5.0
+hdbscan>=0.8.0
+
+# NLP (optionnel mais recommandé pour la segmentation)
+# spacy>=3.5.0
+# fr_core_news_sm @ https://github.com/explosion/spacy-models/releases/download/fr_core_news_sm-3.5.0/fr_core_news_sm-3.5.0.tar.gz
+    
 # OCR (optionnel)
 # pytesseract>=0.3.10
 

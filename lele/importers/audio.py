@@ -26,6 +26,7 @@ class AudioImporter(BaseImporter):
         transcribe: bool = True,
         whisper_model: str = "medium",
         language: Optional[str] = None,
+        show_timestamps: bool = False,
         **options,
     ) -> ImportResult:
         """
@@ -37,6 +38,7 @@ class AudioImporter(BaseImporter):
             transcribe: Si True, transcrit l'audio en texte
             whisper_model: Modèle Whisper à utiliser
             language: Code de langue (None pour auto-détection)
+            show_timestamps: Si True, inclut les horodatages dans le texte
         """
         if isinstance(file_path, str):
             file_path = Path(file_path)
@@ -72,21 +74,29 @@ class AudioImporter(BaseImporter):
             # Transcription si demandée
             if transcribe:
                 logger.info(f"=== Début transcription avec modèle {whisper_model} ===")
+
+                # Récupérer la durée pour l'affichage
+                audio_duration = extra_metadata.get("duration")
+                duration_str = self._format_duration(audio_duration) if audio_duration else "durée inconnue"
+
                 self.report_progress(0.3, f"Chargement du modèle {whisper_model}...")
 
                 try:
                     transcript_result = self._transcribe(
-                        file_path, whisper_model, language
+                        file_path, whisper_model, language, audio_duration
                     )
-                    content = transcript_result["text"]
+                    # Formater le contenu avec sauts de ligne entre segments
+                    segments = transcript_result.get("segments", [])
+                    content = self._format_transcript(segments, show_timestamps)
                     extra_metadata["transcription"] = {
                         "model": whisper_model,
                         "language_detected": transcript_result.get("language"),
-                        "segments": transcript_result.get("segments", []),
+                        "segments": segments,
+                        "show_timestamps": show_timestamps,
                     }
                     logger.info(f"Transcription réussie: {len(content)} caractères")
                     logger.info(f"Langue détectée: {transcript_result.get('language')}")
-                    logger.info(f"Nombre de segments: {len(transcript_result.get('segments', []))}")
+                    logger.info(f"Nombre de segments: {len(segments)}")
                     self.report_progress(0.9, "Transcription terminée")
 
                 except ImportError as e:
@@ -176,7 +186,11 @@ class AudioImporter(BaseImporter):
         return metadata
 
     def _transcribe(
-        self, file_path: Path, model_name: str, language: Optional[str]
+        self,
+        file_path: Path,
+        model_name: str,
+        language: Optional[str],
+        audio_duration: Optional[float] = None,
     ) -> dict:
         """Transcrit un fichier audio avec Whisper."""
         # Configurer FFmpeg avant d'utiliser Whisper
@@ -231,7 +245,24 @@ class AudioImporter(BaseImporter):
         logger.info(f"Modèle '{model_name}' chargé avec succès sur {device}")
 
         logger.info(f"Début de la transcription de: {file_path}")
-        self.report_progress(0.5, f"Transcription en cours ({device})...")
+
+        # Estimer le temps de transcription
+        estimated_time = self._estimate_transcription_time(
+            audio_duration, model_name, device
+        )
+
+        # Construire le message de progression
+        duration_str = self._format_duration(audio_duration) if audio_duration else ""
+        estimate_str = self._format_duration(estimated_time) if estimated_time else ""
+
+        if duration_str and estimate_str:
+            progress_msg = f"Transcription en cours ({device}) - Audio: {duration_str}, estimé: ~{estimate_str}"
+        elif duration_str:
+            progress_msg = f"Transcription en cours ({device}) - Audio: {duration_str}"
+        else:
+            progress_msg = f"Transcription en cours ({device})..."
+
+        self.report_progress(0.5, progress_msg)
 
         options = {}
         if language:
@@ -247,7 +278,7 @@ class AudioImporter(BaseImporter):
         else:
             options["fp16"] = False
 
-        logger.info("Appel de model.transcribe()...")
+        logger.info(f"Appel de model.transcribe() - durée audio: {duration_str}, temps estimé: ~{estimate_str}")
         result = model.transcribe(str(file_path), **options)
         logger.info("Transcription terminée")
 
@@ -269,26 +300,133 @@ class AudioImporter(BaseImporter):
             "segments": simplified_segments,
         }
 
+    def _format_transcript(
+        self, segments: list[dict], show_timestamps: bool = False
+    ) -> str:
+        """
+        Formate la transcription avec sauts de ligne entre segments.
+
+        Args:
+            segments: Liste des segments avec start, end, text
+            show_timestamps: Si True, inclut les horodatages
+
+        Returns:
+            Texte formaté avec sauts de ligne
+        """
+        if not segments:
+            return ""
+
+        lines = []
+        for seg in segments:
+            text = seg.get("text", "").strip()
+            if not text:
+                continue
+
+            if show_timestamps:
+                start = self._format_timestamp(seg["start"])
+                end = self._format_timestamp(seg["end"])
+                lines.append(f"[{start} -> {end}] {text}")
+            else:
+                lines.append(text)
+
+        return "\n\n".join(lines)
+
     def get_transcript_with_timestamps(self, source: Source) -> str:
         """Retourne la transcription avec timestamps."""
         segments = source.metadata.get("transcription", {}).get("segments", [])
         if not segments:
             return source.content or ""
 
-        lines = []
-        for seg in segments:
-            start = self._format_timestamp(seg["start"])
-            end = self._format_timestamp(seg["end"])
-            lines.append(f"[{start} -> {end}] {seg['text']}")
+        return self._format_transcript(segments, show_timestamps=True)
 
-        return "\n".join(lines)
+    def get_transcript_without_timestamps(self, source: Source) -> str:
+        """Retourne la transcription sans timestamps mais avec sauts de ligne."""
+        segments = source.metadata.get("transcription", {}).get("segments", [])
+        if not segments:
+            return source.content or ""
+
+        return self._format_transcript(segments, show_timestamps=False)
 
     @staticmethod
     def _format_timestamp(seconds: float) -> str:
-        """Formate un timestamp en HH:MM:SS."""
+        """Formate un timestamp en HH:MM:SS ou MM:SS."""
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
         secs = int(seconds % 60)
         if hours > 0:
             return f"{hours:02d}:{minutes:02d}:{secs:02d}"
         return f"{minutes:02d}:{secs:02d}"
+
+    @staticmethod
+    def _format_duration(seconds: Optional[float]) -> str:
+        """Formate une durée en format lisible (ex: '5 min 30 s')."""
+        if seconds is None or seconds <= 0:
+            return ""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        if hours > 0:
+            return f"{hours}h {minutes:02d}min"
+        elif minutes > 0:
+            return f"{minutes} min {secs:02d}s"
+        else:
+            return f"{secs}s"
+
+    @staticmethod
+    def _estimate_transcription_time(
+        audio_duration: Optional[float],
+        model_name: str,
+        device: str,
+    ) -> Optional[float]:
+        """
+        Estime le temps de transcription basé sur la durée audio, le modèle et le device.
+
+        Les facteurs sont approximatifs et dépendent beaucoup du hardware.
+        - GPU (CUDA): traitement plus rapide que temps réel pour petits modèles
+        - CPU: généralement plus lent que temps réel
+
+        Returns:
+            Temps estimé en secondes, ou None si impossible à estimer
+        """
+        if audio_duration is None or audio_duration <= 0:
+            return None
+
+        # Facteurs de vitesse approximatifs (ratio temps_traitement / durée_audio)
+        # < 1.0 = plus rapide que temps réel, > 1.0 = plus lent
+        speed_factors = {
+            "cuda": {
+                "tiny": 0.05,    # ~20x temps réel
+                "base": 0.08,    # ~12x temps réel
+                "small": 0.15,   # ~7x temps réel
+                "medium": 0.3,   # ~3x temps réel
+                "large": 0.6,    # ~1.5x temps réel
+            },
+            "cpu": {
+                "tiny": 0.3,     # ~3x temps réel
+                "base": 0.5,     # ~2x temps réel
+                "small": 1.0,    # ~temps réel
+                "medium": 2.5,   # ~0.4x temps réel
+                "large": 6.0,    # ~0.16x temps réel
+            },
+        }
+
+        device_key = "cuda" if device == "cuda" else "cpu"
+        model_key = model_name.lower().replace("-", "").replace(".", "")
+
+        # Trouver le facteur approprié
+        factors = speed_factors.get(device_key, speed_factors["cpu"])
+        factor = factors.get(model_key, factors.get("medium", 1.0))
+
+        estimated = audio_duration * factor
+
+        # Ajouter un overhead fixe pour le chargement (~10-30 secondes selon le modèle)
+        overhead = {
+            "tiny": 5,
+            "base": 8,
+            "small": 15,
+            "medium": 25,
+            "large": 40,
+        }
+        estimated += overhead.get(model_key, 20)
+
+        return estimated

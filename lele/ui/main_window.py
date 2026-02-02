@@ -21,7 +21,14 @@ from ..models.coding import CodeReference
 from ..models.memo import Memo
 from ..importers import get_importer
 from ..utils.settings import get_settings_manager
-from .dialogs import TranscriptionSettingsDialog, ImportProgressDialog
+from .dialogs import (
+    TranscriptionSettingsDialog,
+    ImportProgressDialog,
+    AutoCodingConfigDialog,
+    AutoCodingPreviewDialog,
+    AutoCodingProgressDialog,
+    LLMSettingsDialog,
+)
 
 # Logger pour ce module
 logger = get_logger("ui.main_window")
@@ -53,6 +60,7 @@ class MainWindow:
         settings = self.settings_manager.settings
         self.whisper_model = settings.whisper_model
         self.whisper_language = settings.whisper_language
+        self.transcription_show_timestamps = settings.transcription_show_timestamps
 
         # Configuration des styles
         self.setup_styles()
@@ -115,16 +123,21 @@ class MainWindow:
         # Menu Édition
         edit_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Édition", menu=edit_menu)
-        edit_menu.add_command(label="Annuler", accelerator="Ctrl+Z")
-        edit_menu.add_command(label="Rétablir", accelerator="Ctrl+Y")
+        edit_menu.add_command(label="Annuler", command=self.undo_text, accelerator="Ctrl+Z")
+        edit_menu.add_command(label="Rétablir", command=self.redo_text, accelerator="Ctrl+Y")
         edit_menu.add_separator()
         edit_menu.add_command(label="Rechercher...", command=self.show_search, accelerator="Ctrl+F")
 
         # Menu Codage
         coding_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Codage", menu=coding_menu)
-        coding_menu.add_command(label="Nouveau nœud...", command=self.create_node)
+        coding_menu.add_command(label="Nouveau nœud...", command=self.create_node, accelerator="Ctrl+Shift+N")
         coding_menu.add_command(label="Coder la sélection", command=self.code_selection, accelerator="Ctrl+K")
+        coding_menu.add_separator()
+        coding_menu.add_command(
+            label="🔮 Détection automatique de nœuds...",
+            command=self.auto_detect_nodes
+        )
         coding_menu.add_separator()
         coding_menu.add_command(label="Gérer les nœuds...", command=self.manage_nodes)
 
@@ -145,12 +158,18 @@ class MainWindow:
             label="Transcription audio/vidéo...",
             command=self.show_transcription_settings,
         )
+        settings_menu.add_command(
+            label="🔮 IA / LLM local...",
+            command=self.show_llm_settings,
+        )
 
         # Menu Aide
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Aide", menu=help_menu)
-        help_menu.add_command(label="Documentation")
-        help_menu.add_command(label="À propos", command=self.show_about)
+        help_menu.add_command(label="📖 Guide d'utilisation", command=self.show_help, accelerator="F1")
+        help_menu.add_command(label="⌨️ Raccourcis clavier", command=self.show_shortcuts_help)
+        help_menu.add_separator()
+        help_menu.add_command(label="À propos de Lele", command=self.show_about)
 
     def setup_toolbar(self):
         """Configure la barre d'outils."""
@@ -291,6 +310,14 @@ class MainWindow:
         ttk.Button(btn_frame, text="-", width=3, command=self.delete_node).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text="📁", width=3, command=self.create_node_folder).pack(side=tk.LEFT, padx=2)
 
+        # Bouton de détection automatique
+        ttk.Button(
+            btn_frame,
+            text="🔮 Auto",
+            width=6,
+            command=self.auto_detect_nodes,
+        ).pack(side=tk.RIGHT)
+
         # Arbre des nœuds
         self.nodes_tree = ttk.Treeview(
             self.nodes_frame,
@@ -301,7 +328,7 @@ class MainWindow:
         self.nodes_tree.heading("#0", text="Nœud")
         self.nodes_tree.heading("refs", text="Réf.")
         self.nodes_tree.column("#0", width=180)
-        self.nodes_tree.column("refs", width=50)
+        self.nodes_tree.column("refs", width=40)
 
         nodes_scroll = ttk.Scrollbar(self.nodes_frame, orient=tk.VERTICAL, command=self.nodes_tree.yview)
         self.nodes_tree.configure(yscrollcommand=nodes_scroll.set)
@@ -310,6 +337,11 @@ class MainWindow:
         nodes_scroll.pack(side=tk.RIGHT, fill=tk.Y, pady=5)
 
         self.nodes_tree.bind("<<TreeviewSelect>>", self.on_node_select)
+        self.nodes_tree.bind("<Double-1>", self._on_node_double_click)
+        self.nodes_tree.bind("<Button-3>", self._show_node_context_menu)
+
+        # Menu contextuel sur les nœuds
+        self.node_context_menu = tk.Menu(self.nodes_tree, tearoff=0)
         self.nodes_tree.bind("<Double-1>", self.on_node_double_click)
 
     def setup_content_area(self):
@@ -330,6 +362,7 @@ class MainWindow:
             text_container,
             width=4,
             padx=4,
+            pady=10,  # Même padding que content_text pour alignement
             takefocus=0,
             border=0,
             background="#f0f0f0",
@@ -344,16 +377,53 @@ class MainWindow:
             font=("Consolas", 11),
             padx=10,
             pady=10,
+            undo=True,
+            maxundo=-1,  # Historique illimité
         )
         self.content_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        text_scroll = ttk.Scrollbar(text_container, orient=tk.VERTICAL, command=self.content_text.yview)
-        self.content_text.configure(yscrollcommand=text_scroll.set)
-        text_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        # Scrollbar synchronisée avec le texte ET les numéros de ligne
+        self.text_scroll = ttk.Scrollbar(text_container, orient=tk.VERTICAL)
+        self.text_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Fonction de synchronisation du scroll
+        def on_text_scroll(*args):
+            """Synchronise le scroll entre le texte et les numéros de ligne."""
+            self.line_numbers.yview_moveto(args[0])
+            self.text_scroll.set(*args)
+
+        def on_scrollbar_scroll(*args):
+            """Applique le scroll aux deux widgets de texte."""
+            self.content_text.yview(*args)
+            self.line_numbers.yview(*args)
+
+        self.content_text.configure(yscrollcommand=on_text_scroll)
+        self.text_scroll.configure(command=on_scrollbar_scroll)
+
+        # Synchroniser aussi le scroll à la molette sur les numéros de ligne
+        def on_mousewheel_line_numbers(event):
+            self.content_text.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            return "break"
+
+        self.line_numbers.bind("<MouseWheel>", on_mousewheel_line_numbers)
+
+        # Mettre à jour les numéros de ligne lors du redimensionnement
+        # (le word-wrap peut changer le nombre de lignes visuelles)
+        def on_text_configure(event):
+            # Utiliser after pour éviter les appels multiples rapides
+            if hasattr(self, "_line_numbers_update_pending"):
+                self.root.after_cancel(self._line_numbers_update_pending)
+            self._line_numbers_update_pending = self.root.after(100, self.update_line_numbers)
+
+        self.content_text.bind("<Configure>", on_text_configure)
 
         # Tags pour le surlignage des codes
         self.content_text.tag_configure("highlight", background="#fff3cd")
         self.content_text.tag_configure("selection", background="#cce5ff")
+
+        # Menu contextuel sur le texte
+        self.text_context_menu = tk.Menu(self.content_text, tearoff=0)
+        self.content_text.bind("<Button-3>", self._show_text_context_menu)
 
         # Vue média (pour audio/vidéo/images)
         self.media_frame = ttk.Frame(self.content_notebook)
@@ -393,12 +463,14 @@ class MainWindow:
 
         self.refs_tree = ttk.Treeview(
             self.refs_frame,
-            columns=("source", "content"),
+            columns=("source", "line", "content"),
             show="headings",
         )
         self.refs_tree.heading("source", text="Source")
+        self.refs_tree.heading("line", text="Ligne")
         self.refs_tree.heading("content", text="Contenu")
         self.refs_tree.column("source", width=150)
+        self.refs_tree.column("line", width=60, anchor=tk.CENTER)
         self.refs_tree.column("content", width=400)
         self.refs_tree.pack(fill=tk.BOTH, expand=True)
 
@@ -462,6 +534,19 @@ class MainWindow:
         self.root.bind("<Control-f>", lambda e: self.show_search())
         self.root.bind("<Control-k>", lambda e: self.code_selection())
         self.root.bind("<Control-q>", lambda e: self.quit_app())
+
+        # Édition (undo/redo)
+        self.root.bind("<Control-z>", lambda e: self.undo_text())
+        self.root.bind("<Control-y>", lambda e: self.redo_text())
+
+        # Raccourcis supplémentaires pour les nœuds
+        self.root.bind("<Control-Shift-N>", lambda e: self.create_node())
+        self.root.bind("<Control-Shift-K>", lambda e: self._quick_code_from_selection())
+        self.root.bind("<F2>", lambda e: self._rename_node() if self.selected_node else None)
+        self.root.bind("<Delete>", lambda e: self._delete_if_node_focused())
+
+        # Aide
+        self.root.bind("<F1>", lambda e: self.show_help())
 
     # --- Projets récents ---
 
@@ -650,6 +735,7 @@ class MainWindow:
         transcribe = True
         whisper_model = self.whisper_model
         whisper_language = self.whisper_language
+        show_timestamps = self.transcription_show_timestamps
 
         if has_audio_video:
             dialog = TranscriptionSettingsDialog(
@@ -657,6 +743,7 @@ class MainWindow:
                 current_model=self.whisper_model,
                 current_language=self.whisper_language,
                 show_transcribe_option=True,
+                current_show_timestamps=self.transcription_show_timestamps,
             )
             self.root.wait_window(dialog)
 
@@ -666,14 +753,20 @@ class MainWindow:
             transcribe = dialog.result_transcribe
             whisper_model = dialog.result_model
             whisper_language = dialog.result_language
+            show_timestamps = dialog.result_show_timestamps
 
             # Sauvegarder les préférences
             self.whisper_model = whisper_model
             self.whisper_language = whisper_language
+            self.transcription_show_timestamps = show_timestamps
+
+            # Persister dans les settings
+            self.settings_manager.settings.transcription_show_timestamps = show_timestamps
+            self.settings_manager.save()
 
         # Lancer l'import dans un thread séparé
         self._start_async_import(
-            files, transcribe, whisper_model, whisper_language
+            files, transcribe, whisper_model, whisper_language, show_timestamps
         )
 
     def _start_async_import(
@@ -682,6 +775,7 @@ class MainWindow:
         transcribe: bool,
         whisper_model: str,
         whisper_language: Optional[str],
+        show_timestamps: bool = False,
     ):
         """Lance l'import de fichiers de manière asynchrone."""
         logger.info(f"Démarrage de l'import de {len(files)} fichier(s)")
@@ -695,6 +789,11 @@ class MainWindow:
                 progress_dialog.after(
                     0, lambda: progress_dialog.set_step(progress, message)
                 )
+                # Logger les messages importants (durée, estimation) dans les détails
+                if "Audio:" in message or "Vidéo:" in message or "estimé:" in message:
+                    progress_dialog.after(
+                        0, lambda m=message: progress_dialog.log(f"  ⏱️ {m}")
+                    )
 
         def do_import():
             sources_to_save = []
@@ -734,14 +833,17 @@ class MainWindow:
                         import_options["transcribe"] = transcribe
                         import_options["whisper_model"] = whisper_model
                         import_options["language"] = whisper_language
+                        import_options["show_timestamps"] = show_timestamps
                         logger.info(
                             f"Options transcription: model={whisper_model}, "
-                            f"lang={whisper_language}, transcribe={transcribe}"
+                            f"lang={whisper_language}, transcribe={transcribe}, "
+                            f"timestamps={show_timestamps}"
                         )
                         progress_dialog.after(
                             0,
                             lambda: progress_dialog.log(
-                                f"  Transcription: modèle={whisper_model}"
+                                f"  Transcription: modèle={whisper_model}, "
+                                f"timestamps={'oui' if show_timestamps else 'non'}"
                             ),
                         )
 
@@ -845,63 +947,696 @@ class MainWindow:
             self.project.close()
         self.root.quit()
 
+    # --- Édition (undo/redo) ---
+
+    def undo_text(self):
+        """Annule la dernière modification dans le texte."""
+        try:
+            self.content_text.edit_undo()
+        except tk.TclError:
+            pass  # Rien à annuler
+
+    def redo_text(self):
+        """Rétablit la dernière modification annulée."""
+        try:
+            self.content_text.edit_redo()
+        except tk.TclError:
+            pass  # Rien à rétablir
+
     # --- Actions de codage ---
 
-    def create_node(self):
-        """Crée un nouveau nœud."""
+    def create_node(self, initial_name: str = "", parent_node: Node | None = None, code_selection: bool = False):
+        """Crée un nouveau nœud avec dialogue amélioré.
+
+        Args:
+            initial_name: Nom pré-rempli (ex: depuis sélection de texte)
+            parent_node: Nœud parent (None = racine, sinon enfant)
+            code_selection: Si True, code automatiquement la sélection après création
+        """
         if not self.project:
             return
 
         dialog = tk.Toplevel(self.root)
         dialog.title("Nouveau nœud")
-        dialog.geometry("350x200")
+        dialog.geometry("450x420")
         dialog.transient(self.root)
         dialog.grab_set()
 
-        ttk.Label(dialog, text="Nom:").pack(padx=20, pady=(20, 5), anchor=tk.W)
-        name_var = tk.StringVar()
-        ttk.Entry(dialog, textvariable=name_var, width=35).pack(padx=20, pady=5)
+        # Nom
+        ttk.Label(dialog, text="Nom du nœud:", font=("", 10, "bold")).pack(
+            padx=20, pady=(20, 5), anchor=tk.W
+        )
+        name_var = tk.StringVar(value=initial_name)
+        name_entry = ttk.Entry(dialog, textvariable=name_var, width=45)
+        name_entry.pack(padx=20, pady=5)
+        name_entry.focus_set()
+        name_entry.select_range(0, tk.END)
 
-        ttk.Label(dialog, text="Description:").pack(padx=20, pady=(10, 5), anchor=tk.W)
+        # Description
+        ttk.Label(dialog, text="Description (optionnel):").pack(padx=20, pady=(10, 5), anchor=tk.W)
         desc_var = tk.StringVar()
-        ttk.Entry(dialog, textvariable=desc_var, width=35).pack(padx=20, pady=5)
+        ttk.Entry(dialog, textvariable=desc_var, width=45).pack(padx=20, pady=5)
 
-        ttk.Label(dialog, text="Couleur:").pack(padx=20, pady=(10, 5), anchor=tk.W)
+        # Couleur
+        ttk.Label(dialog, text="Couleur:", font=("", 10, "bold")).pack(padx=20, pady=(15, 5), anchor=tk.W)
         color_var = tk.StringVar(value="#3498db")
 
         color_frame = ttk.Frame(dialog)
         color_frame.pack(padx=20, pady=5, fill=tk.X)
 
-        colors = ["#3498db", "#e74c3c", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"]
-        for color in colors:
+        # Palette de couleurs étendue
+        colors = [
+            "#e74c3c", "#e91e63", "#9b59b6", "#673ab7",
+            "#3498db", "#2196f3", "#00bcd4", "#009688",
+            "#2ecc71", "#4caf50", "#8bc34a", "#cddc39",
+            "#f39c12", "#ff9800", "#ff5722", "#795548",
+        ]
+
+        self._color_buttons = []
+        for i, color in enumerate(colors):
             btn = tk.Button(
                 color_frame,
                 bg=color,
-                width=3,
-                command=lambda c=color: color_var.set(c),
+                activebackground=color,
+                width=2,
+                height=1,
+                relief=tk.FLAT,
+                cursor="hand2",
+                command=lambda c=color: self._select_node_color(c, color_var),
             )
-            btn.pack(side=tk.LEFT, padx=2)
+            btn.grid(row=i // 8, column=i % 8, padx=2, pady=2)
+            self._color_buttons.append((btn, color))
+
+        # Indicateur de couleur sélectionnée
+        preview_frame = ttk.Frame(dialog)
+        preview_frame.pack(padx=20, pady=10, fill=tk.X)
+
+        ttk.Label(preview_frame, text="Aperçu:").pack(side=tk.LEFT)
+        self._color_preview = tk.Label(
+            preview_frame,
+            text="  ●  Exemple de nœud",
+            fg=color_var.get(),
+            font=("", 11),
+        )
+        self._color_preview.pack(side=tk.LEFT, padx=10)
+
+        def update_preview(*args):
+            self._color_preview.configure(fg=color_var.get())
+        color_var.trace_add("write", update_preview)
+
+        # Parent
+        if parent_node:
+            parent_label = ttk.Label(
+                dialog,
+                text=f"📁 Parent: {parent_node.name}",
+                foreground="#666",
+            )
+            parent_label.pack(padx=20, anchor=tk.W)
+
+        # Boutons
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(pady=20, fill=tk.X, padx=20)
 
         def create():
             name = name_var.get().strip()
             if not name:
+                messagebox.showwarning("Attention", "Le nom du nœud est requis.", parent=dialog)
                 return
 
             node = Node(
                 name=name,
                 description=desc_var.get().strip(),
                 color=color_var.get(),
-                parent_id=self.selected_node.id if self.selected_node else None,
+                parent_id=parent_node.id if parent_node else None,
             )
             node.save(self.project.db)
             self.refresh_nodes()
-            dialog.destroy()
 
-        ttk.Button(dialog, text="Créer", command=create).pack(pady=20)
+            # Si demandé, coder la sélection avec ce nouveau nœud
+            if code_selection:
+                self.selected_node = node
+                self.code_selection()
+
+            dialog.destroy()
+            self.update_status(f"Nœud '{name}' créé")
+
+        ttk.Button(btn_frame, text="Annuler", command=dialog.destroy).pack(side=tk.RIGHT, padx=5)
+        create_btn = ttk.Button(btn_frame, text="✓ Créer", command=create)
+        create_btn.pack(side=tk.RIGHT)
+
+        # Raccourci Entrée pour créer
+        dialog.bind("<Return>", lambda e: create())
+        dialog.bind("<Escape>", lambda e: dialog.destroy())
+
+    def _select_node_color(self, color: str, color_var: tk.StringVar):
+        """Met à jour la couleur sélectionnée."""
+        color_var.set(color)
 
     def create_node_folder(self):
-        """Crée un dossier de nœuds."""
-        self.create_node()  # Même logique pour l'instant
+        """Crée un dossier de nœuds (nœud enfant du nœud sélectionné)."""
+        parent = self.selected_node if self.selected_node else None
+        self.create_node(parent_node=parent)
+
+    # --- Menus contextuels ---
+
+    def _show_text_context_menu(self, event):
+        """Affiche le menu contextuel sur le texte."""
+        self.text_context_menu.delete(0, tk.END)
+
+        # Vérifier s'il y a une sélection
+        has_selection = False
+        selected_text = ""
+        try:
+            selected_text = self.content_text.get(tk.SEL_FIRST, tk.SEL_LAST)
+            has_selection = bool(selected_text.strip())
+        except tk.TclError:
+            pass
+
+        if has_selection and self.project and self.current_source:
+            # Options de codage
+            nodes = Node.get_all(self.project.db)
+
+            if nodes:
+                # Sous-menu "Coder avec..."
+                code_menu = tk.Menu(self.text_context_menu, tearoff=0)
+                for node in nodes[:15]:  # Limiter à 15 pour éviter un menu trop long
+                    code_menu.add_command(
+                        label=f"● {node.name}",
+                        foreground=node.color,
+                        command=lambda n=node: self._code_with_node(n),
+                    )
+
+                if len(nodes) > 15:
+                    code_menu.add_separator()
+                    code_menu.add_command(label="Plus...", command=self._show_all_nodes_for_coding)
+
+                self.text_context_menu.add_cascade(label="🏷️ Coder avec", menu=code_menu)
+                self.text_context_menu.add_separator()
+
+            # Créer un nœud depuis la sélection
+            short_text = selected_text[:30].replace("\n", " ")
+            if len(selected_text) > 30:
+                short_text += "..."
+
+            self.text_context_menu.add_command(
+                label="➕ Nouveau nœud depuis la sélection...",
+                command=lambda: self.create_node(initial_name=short_text, code_selection=True),
+            )
+
+            if self.selected_node:
+                self.text_context_menu.add_command(
+                    label=f"🏷️ Coder avec '{self.selected_node.name}'",
+                    command=self.code_selection,
+                )
+
+            self.text_context_menu.add_separator()
+
+        # Options standard
+        self.text_context_menu.add_command(
+            label="📋 Copier",
+            command=lambda: self.root.event_generate("<<Copy>>"),
+            accelerator="Ctrl+C",
+        )
+
+        if has_selection:
+            self.text_context_menu.add_command(
+                label="🔍 Rechercher dans les sources",
+                command=lambda: self._search_selected_text(selected_text),
+            )
+
+        # Options de reformatage pour les sources audio/vidéo avec segments
+        if self.current_source and self._has_transcription_segments():
+            self.text_context_menu.add_separator()
+            reformat_menu = tk.Menu(self.text_context_menu, tearoff=0)
+            reformat_menu.add_command(
+                label="Avec horodatages [00:00 -> 00:05]",
+                command=lambda: self._reformat_transcription(show_timestamps=True),
+            )
+            reformat_menu.add_command(
+                label="Sans horodatages (paragraphes)",
+                command=lambda: self._reformat_transcription(show_timestamps=False),
+            )
+            self.text_context_menu.add_cascade(label="🔄 Reformater la transcription", menu=reformat_menu)
+
+        self.text_context_menu.tk_popup(event.x_root, event.y_root)
+
+    def _has_transcription_segments(self) -> bool:
+        """Vérifie si la source actuelle a des segments de transcription."""
+        if not self.current_source:
+            return False
+        transcription = self.current_source.metadata.get("transcription", {})
+        segments = transcription.get("segments", [])
+        return len(segments) > 0
+
+    def _reformat_transcription(self, show_timestamps: bool):
+        """
+        Reformate la transcription de la source actuelle.
+
+        Cette opération met à jour le contenu de la source avec le nouveau formatage
+        (avec ou sans horodatages) tout en préservant les segments originaux.
+        """
+        if not self.current_source or not self.project:
+            return
+
+        transcription = self.current_source.metadata.get("transcription", {})
+        segments = transcription.get("segments", [])
+
+        if not segments:
+            messagebox.showwarning(
+                "Reformatage impossible",
+                "Cette source ne contient pas de segments de transcription."
+            )
+            return
+
+        # Demander confirmation
+        format_type = "avec horodatages" if show_timestamps else "sans horodatages (paragraphes)"
+        confirm = messagebox.askyesno(
+            "Reformater la transcription",
+            f"Voulez-vous reformater le texte {format_type} ?\n\n"
+            "Le contenu sera mis à jour mais les segments originaux seront préservés.\n"
+            "Note : Les codages existants pourraient être décalés.",
+            icon="question"
+        )
+
+        if not confirm:
+            return
+
+        # Importer l'AudioImporter pour utiliser la méthode de formatage
+        from ..importers.audio import AudioImporter
+
+        importer = AudioImporter()
+        new_content = importer._format_transcript(segments, show_timestamps)
+
+        # Mettre à jour la source
+        self.current_source.content = new_content
+        transcription["show_timestamps"] = show_timestamps
+        self.current_source.metadata["transcription"] = transcription
+
+        # Sauvegarder
+        self.current_source.save(self.project.db)
+
+        # Rafraîchir l'affichage
+        self.display_source()
+
+        messagebox.showinfo(
+            "Reformatage terminé",
+            f"Le texte a été reformaté {format_type}."
+        )
+
+    def _show_node_context_menu(self, event):
+        """Affiche le menu contextuel sur un nœud."""
+        # Sélectionner le nœud sous le curseur
+        item = self.nodes_tree.identify_row(event.y)
+        if item:
+            self.nodes_tree.selection_set(item)
+            self.on_node_select(None)
+
+        self.node_context_menu.delete(0, tk.END)
+
+        if self.selected_node:
+            self.node_context_menu.add_command(
+                label="✏️ Renommer...",
+                command=self._rename_node,
+            )
+            self.node_context_menu.add_command(
+                label="🎨 Changer la couleur...",
+                command=self._change_node_color,
+            )
+            self.node_context_menu.add_separator()
+            self.node_context_menu.add_command(
+                label="➕ Ajouter un sous-nœud...",
+                command=lambda: self.create_node(parent_node=self.selected_node),
+            )
+            self.node_context_menu.add_separator()
+            self.node_context_menu.add_command(
+                label="🗑️ Supprimer",
+                command=self.delete_node,
+            )
+        else:
+            self.node_context_menu.add_command(
+                label="➕ Nouveau nœud...",
+                command=self.create_node,
+            )
+
+        self.node_context_menu.tk_popup(event.x_root, event.y_root)
+
+    def _on_node_double_click(self, event):
+        """Double-clic sur un nœud : code la sélection si du texte est sélectionné."""
+        if not self.selected_node or not self.current_source:
+            return
+
+        try:
+            selected_text = self.content_text.get(tk.SEL_FIRST, tk.SEL_LAST)
+            if selected_text.strip():
+                self.code_selection()
+        except tk.TclError:
+            # Pas de sélection, ne rien faire
+            pass
+
+    def _code_with_node(self, node: Node):
+        """Code la sélection avec le nœud spécifié."""
+        old_selected = self.selected_node
+        self.selected_node = node
+        self.code_selection()
+        self.selected_node = old_selected
+
+    def _show_all_nodes_for_coding(self):
+        """Affiche un dialogue pour sélectionner un nœud parmi tous."""
+        if not self.project:
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Sélectionner un nœud")
+        dialog.geometry("350x400")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        ttk.Label(dialog, text="Choisissez un nœud pour coder la sélection:").pack(
+            padx=20, pady=(20, 10), anchor=tk.W
+        )
+
+        # Liste des nœuds
+        tree_frame = ttk.Frame(dialog)
+        tree_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=5)
+
+        tree = ttk.Treeview(tree_frame, show="tree", selectmode="browse")
+        scroll = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=scroll.set)
+
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        nodes = Node.get_all(self.project.db)
+        for node in nodes:
+            tree.tag_configure(node.color, foreground=node.color)
+            tree.insert("", tk.END, iid=node.id, text=f"● {node.name}", tags=(node.color,))
+
+        def on_select():
+            selection = tree.selection()
+            if selection:
+                node_id = selection[0]
+                node = Node.get_by_id(self.project.db, node_id)
+                if node:
+                    self._code_with_node(node)
+            dialog.destroy()
+
+        ttk.Button(dialog, text="Coder", command=on_select).pack(pady=15)
+
+        tree.bind("<Double-1>", lambda e: on_select())
+
+    def _search_selected_text(self, text: str):
+        """Recherche le texte sélectionné dans les sources."""
+        # Implémenter la recherche
+        self.update_status(f"Recherche: {text[:50]}...")
+
+    def _rename_node(self):
+        """Renomme le nœud sélectionné."""
+        if not self.selected_node:
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Renommer le nœud")
+        dialog.geometry("350x120")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        ttk.Label(dialog, text="Nouveau nom:").pack(padx=20, pady=(20, 5), anchor=tk.W)
+        name_var = tk.StringVar(value=self.selected_node.name)
+        entry = ttk.Entry(dialog, textvariable=name_var, width=40)
+        entry.pack(padx=20, pady=5)
+        entry.focus_set()
+        entry.select_range(0, tk.END)
+
+        def save():
+            new_name = name_var.get().strip()
+            if new_name and new_name != self.selected_node.name:
+                self.selected_node.name = new_name
+                self.selected_node.save(self.project.db)
+                self.refresh_nodes()
+                self.update_status(f"Nœud renommé en '{new_name}'")
+            dialog.destroy()
+
+        dialog.bind("<Return>", lambda e: save())
+        dialog.bind("<Escape>", lambda e: dialog.destroy())
+
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(pady=15)
+        ttk.Button(btn_frame, text="Annuler", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Enregistrer", command=save).pack(side=tk.LEFT)
+
+    def _change_node_color(self):
+        """Change la couleur du nœud sélectionné."""
+        if not self.selected_node:
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Couleur du nœud")
+        dialog.geometry("350x150")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        ttk.Label(
+            dialog,
+            text=f"Couleur pour '{self.selected_node.name}':",
+        ).pack(padx=20, pady=(20, 10), anchor=tk.W)
+
+        color_var = tk.StringVar(value=self.selected_node.color)
+
+        color_frame = ttk.Frame(dialog)
+        color_frame.pack(padx=20, pady=5)
+
+        colors = [
+            "#e74c3c", "#e91e63", "#9b59b6", "#673ab7",
+            "#3498db", "#2196f3", "#00bcd4", "#009688",
+            "#2ecc71", "#4caf50", "#8bc34a", "#cddc39",
+            "#f39c12", "#ff9800", "#ff5722", "#795548",
+        ]
+
+        for i, color in enumerate(colors):
+            btn = tk.Button(
+                color_frame,
+                bg=color,
+                activebackground=color,
+                width=2,
+                height=1,
+                relief=tk.FLAT if color != self.selected_node.color else tk.SUNKEN,
+                cursor="hand2",
+                command=lambda c=color: color_var.set(c),
+            )
+            btn.grid(row=i // 8, column=i % 8, padx=2, pady=2)
+
+        def save():
+            new_color = color_var.get()
+            if new_color != self.selected_node.color:
+                self.selected_node.color = new_color
+                self.selected_node.save(self.project.db)
+                self.refresh_nodes()
+                if self.current_source:
+                    self.display_source()  # Rafraîchir les surlignages
+                self.update_status("Couleur mise à jour")
+            dialog.destroy()
+
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(pady=15)
+        ttk.Button(btn_frame, text="Annuler", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Appliquer", command=save).pack(side=tk.LEFT)
+
+    def _quick_code_from_selection(self):
+        """Crée un nœud depuis la sélection et code immédiatement (Ctrl+Shift+K)."""
+        if not self.project or not self.current_source:
+            return
+
+        try:
+            selected_text = self.content_text.get(tk.SEL_FIRST, tk.SEL_LAST)
+            if selected_text.strip():
+                short_text = selected_text[:30].replace("\n", " ").strip()
+                if len(selected_text) > 30:
+                    short_text += "..."
+                self.create_node(initial_name=short_text, code_selection=True)
+        except tk.TclError:
+            messagebox.showinfo("Information", "Sélectionnez du texte à coder.")
+
+    def _delete_if_node_focused(self):
+        """Supprime le nœud si le focus est sur l'arbre des nœuds."""
+        if self.root.focus_get() == self.nodes_tree and self.selected_node:
+            self.delete_node()
+
+    def auto_detect_nodes(self):
+        """Lance la détection automatique de nœuds."""
+        if not self.project:
+            messagebox.showwarning(
+                "Attention",
+                "Veuillez d'abord créer ou ouvrir un projet."
+            )
+            return
+
+        # Récupérer les sources avec contenu textuel
+        all_sources = Source.get_all(self.project.db)
+        text_sources = [
+            {
+                "id": s.id,
+                "name": s.name,
+                "type": s.type.value,
+                "content": s.content,
+            }
+            for s in all_sources
+            if s.content and len(s.content) > 100
+        ]
+
+        if not text_sources:
+            messagebox.showwarning(
+                "Attention",
+                "Aucune source avec contenu textuel suffisant.\n"
+                "Importez des documents avant d'utiliser la détection automatique."
+            )
+            return
+
+        # Récupérer les nœuds existants
+        existing_nodes = [
+            {"id": n.id, "name": n.name}
+            for n in Node.get_all(self.project.db)
+        ]
+
+        # Charger les settings
+        settings = self.settings_manager.settings
+        saved_settings = {
+            "llm_provider": settings.llm_provider,
+            "llm_model": settings.llm_model,
+            "max_themes": settings.autocoding_max_themes,
+            "min_cluster_size": settings.autocoding_min_cluster_size,
+            "confidence_threshold": settings.autocoding_confidence_threshold,
+        }
+
+        # Ouvrir le dialogue de configuration
+        config_dialog = AutoCodingConfigDialog(
+            self.root,
+            sources=text_sources,
+            existing_nodes=existing_nodes,
+            settings=saved_settings,
+        )
+        self.root.wait_window(config_dialog)
+
+        if config_dialog.cancelled or not config_dialog.result_config:
+            return
+
+        config = config_dialog.result_config
+        sources_to_analyze = config_dialog.result_sources
+
+        # Sauvegarder les paramètres
+        settings.llm_provider = config.llm_provider.value
+        settings.llm_model = config.llm_model
+        settings.autocoding_max_themes = config.max_themes
+        settings.autocoding_min_cluster_size = config.min_cluster_size
+        settings.autocoding_confidence_threshold = config.confidence_threshold
+        self.settings_manager.save()
+
+        # Lancer l'analyse dans un thread
+        self._run_auto_coding(sources_to_analyze, config, existing_nodes)
+
+    def _run_auto_coding(self, sources: list, config, existing_nodes: list):
+        """Exécute l'auto-codage de manière asynchrone."""
+        from ..analysis.auto_coding import AutoCodingEngine, create_nodes_from_proposals
+
+        # Dialogue de progression
+        progress_dialog = AutoCodingProgressDialog(self.root, len(sources))
+
+        def do_analysis():
+            try:
+                # Créer le moteur
+                settings = self.settings_manager.settings
+                engine = AutoCodingEngine(
+                    embedding_model=settings.autocoding_embedding_model,
+                    llm_provider=config.llm_provider,
+                    llm_model=config.llm_model,
+                    ollama_url=settings.ollama_url,
+                )
+
+                # Callback de progression
+                def on_progress(progress: float, message: str):
+                    if not progress_dialog.cancelled:
+                        progress_dialog.after(
+                            0,
+                            lambda: progress_dialog.update_progress(progress, message)
+                        )
+
+                # Exécuter l'analyse
+                result = engine.analyze(
+                    sources=sources,
+                    config=config,
+                    existing_nodes=existing_nodes,
+                    progress_callback=on_progress,
+                )
+
+                # Fermer le dialogue de progression et afficher les résultats
+                self.root.after(0, lambda: self._show_auto_coding_results(result, progress_dialog))
+
+            except Exception as e:
+                logger.error(f"Erreur auto-codage: {e}")
+                self.root.after(0, lambda: self._on_auto_coding_error(str(e), progress_dialog))
+
+        thread = threading.Thread(target=do_analysis, daemon=True)
+        thread.start()
+
+    def _show_auto_coding_results(self, result, progress_dialog):
+        """Affiche les résultats de l'auto-codage."""
+        from ..analysis.auto_coding import create_nodes_from_proposals
+
+        progress_dialog.complete()
+
+        if not result.proposals:
+            messagebox.showinfo(
+                "Résultat",
+                "Aucun thème détecté.\n\n"
+                "Essayez avec des paramètres différents ou ajoutez plus de contenu."
+            )
+            return
+
+        # Afficher le dialogue de preview
+        preview_dialog = AutoCodingPreviewDialog(self.root, result)
+        self.root.wait_window(preview_dialog)
+
+        if not preview_dialog.approved:
+            return
+
+        # Créer les nœuds et les codages
+        try:
+            created = create_nodes_from_proposals(
+                self.project.db,
+                result.selected_proposals,
+                parent_id=None,
+            )
+
+            self.refresh_nodes()
+            self.refresh_sources()
+
+            n_nodes = len([c for c in created if c.get("is_new")])
+            n_segments = result.total_selected_segments
+
+            messagebox.showinfo(
+                "Succès",
+                f"Auto-codage terminé !\n\n"
+                f"• {n_nodes} nouveau(x) nœud(s) créé(s)\n"
+                f"• {n_segments} segment(s) codé(s)"
+            )
+
+            self.update_status(f"Auto-codage: {n_nodes} nœuds, {n_segments} codages")
+
+        except Exception as e:
+            logger.error(f"Erreur création nœuds: {e}")
+            messagebox.showerror(
+                "Erreur",
+                f"Erreur lors de la création des nœuds:\n{e}"
+            )
+
+    def _on_auto_coding_error(self, error_message: str, progress_dialog):
+        """Gère une erreur d'auto-codage."""
+        progress_dialog.complete()
+        messagebox.showerror(
+            "Erreur",
+            f"Erreur lors de l'analyse automatique:\n\n{error_message}\n\n"
+            "Vérifiez que les dépendances sont installées:\n"
+            "pip install sentence-transformers umap-learn hdbscan"
+        )
 
     def delete_node(self):
         """Supprime le nœud sélectionné."""
@@ -957,8 +1692,39 @@ class MainWindow:
     def highlight_coding(self, start, end, color):
         """Surligne un passage codé."""
         tag_name = f"code_{color}"
-        self.content_text.tag_configure(tag_name, background=color + "40")
+        # Tkinter ne supporte pas les couleurs avec alpha, créer une version claire
+        light_color = self._lighten_color(color, factor=0.7)
+        self.content_text.tag_configure(tag_name, background=light_color)
         self.content_text.tag_add(tag_name, start, end)
+
+    def _lighten_color(self, hex_color: str, factor: float = 0.7) -> str:
+        """Éclaircit une couleur hex pour le surlignage.
+
+        Args:
+            hex_color: Couleur au format #RRGGBB
+            factor: Facteur d'éclaircissement (0-1, plus haut = plus clair)
+
+        Returns:
+            Couleur éclaircie au format #RRGGBB
+        """
+        # Nettoyer la couleur
+        color = hex_color.lstrip('#')
+        if len(color) != 6:
+            return "#FFFF99"  # Jaune par défaut si format invalide
+
+        try:
+            r = int(color[0:2], 16)
+            g = int(color[2:4], 16)
+            b = int(color[4:6], 16)
+
+            # Mélanger avec du blanc
+            r = int(r + (255 - r) * factor)
+            g = int(g + (255 - g) * factor)
+            b = int(b + (255 - b) * factor)
+
+            return f"#{r:02x}{g:02x}{b:02x}"
+        except ValueError:
+            return "#FFFF99"
 
     def manage_nodes(self):
         """Affiche la fenêtre de gestion des nœuds."""
@@ -1197,6 +1963,228 @@ class MainWindow:
             "et diverses visualisations.",
         )
 
+    def show_help(self):
+        """Affiche le guide d'utilisation."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Guide d'utilisation - Lele")
+        dialog.geometry("700x600")
+        dialog.transient(self.root)
+
+        # Frame principale avec scrollbar
+        main_frame = ttk.Frame(dialog)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Canvas et scrollbar
+        canvas = tk.Canvas(main_frame)
+        scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Contenu de l'aide
+        help_sections = [
+            ("🚀 Démarrage rapide", [
+                "1. Créez un projet: Fichier > Nouveau projet (Ctrl+N)",
+                "2. Importez des fichiers: glissez-déposez ou Fichier > Importer",
+                "3. Créez des nœuds (codes) dans le panneau Nœuds",
+                "4. Sélectionnez du texte et codez-le avec Ctrl+K",
+            ]),
+            ("📁 Gestion des projets", [
+                "• Nouveau projet: Fichier > Nouveau projet",
+                "• Ouvrir: Fichier > Ouvrir projet",
+                "• Sauvegarder: Fichier > Sauvegarder (Ctrl+S)",
+                "• Projets récents accessibles via Fichier > Projets récents",
+            ]),
+            ("📥 Import de données", [
+                "Formats supportés:",
+                "• Documents: TXT, PDF, Word (.docx), RTF",
+                "• Média: Audio (MP3, WAV, FLAC), Vidéo (MP4, AVI, MOV)",
+                "• Images: JPG, PNG, GIF, BMP, TIFF",
+                "• Tableurs: Excel (.xlsx), CSV",
+                "• Bibliographie: RIS, BibTeX",
+                "",
+                "Pour l'audio/vidéo, la transcription automatique est disponible",
+                "via le moteur Whisper (OpenAI).",
+            ]),
+            ("🏷️ Codage", [
+                "Méthode classique:",
+                "1. Ouvrez une source (double-clic)",
+                "2. Sélectionnez un nœud dans le panneau Nœuds",
+                "3. Surlignez le texte à coder",
+                "4. Appuyez sur Ctrl+K",
+                "",
+                "Méthode rapide:",
+                "• Surlignez du texte → clic droit → \"Coder avec\"",
+                "• Ou double-cliquez sur un nœud avec du texte sélectionné",
+                "",
+                "Créer et coder en même temps:",
+                "• Surlignez du texte → Ctrl+Shift+K",
+            ]),
+            ("🔮 Détection automatique de thèmes", [
+                "1. Cliquez sur \"🔮 Auto\" dans le panneau Nœuds",
+                "2. Sélectionnez les sources à analyser",
+                "3. Configurez les paramètres (granularité, nb max de thèmes)",
+                "4. Validez les thèmes proposés avant création",
+                "",
+                "Pour un meilleur nommage, configurez Ollama dans",
+                "Paramètres > IA / LLM local.",
+            ]),
+            ("📊 Visualisations", [
+                "Menu Analyse propose:",
+                "• Nuage de mots: fréquence des termes",
+                "• Carte mentale: hiérarchie des nœuds",
+                "• Sociogramme: co-occurrences entre nœuds",
+                "• Matrice: croisement nœuds × sources",
+            ]),
+            ("💡 Conseils", [
+                "• Utilisez les couleurs pour distinguer les thèmes",
+                "• Créez une hiérarchie de nœuds (sous-nœuds)",
+                "• Documentez vos décisions dans les mémos",
+                "• Sauvegardez régulièrement votre projet",
+            ]),
+        ]
+
+        for title, lines in help_sections:
+            # Titre de section
+            title_label = ttk.Label(
+                scrollable_frame,
+                text=title,
+                font=("", 12, "bold"),
+            )
+            title_label.pack(anchor=tk.W, pady=(15, 5), padx=10)
+
+            # Contenu
+            for line in lines:
+                line_label = ttk.Label(
+                    scrollable_frame,
+                    text=line,
+                    wraplength=650,
+                )
+                line_label.pack(anchor=tk.W, padx=20)
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Binding molette souris avec nettoyage à la fermeture
+        mousewheel_bound = [False]  # Liste pour pouvoir modifier dans les closures
+
+        def _on_mousewheel(event):
+            try:
+                if canvas.winfo_exists():
+                    canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            except tk.TclError:
+                pass
+
+        def _bind_mousewheel(event):
+            if not mousewheel_bound[0]:
+                dialog.bind_all("<MouseWheel>", _on_mousewheel)
+                mousewheel_bound[0] = True
+
+        def _unbind_mousewheel(event=None):
+            if mousewheel_bound[0]:
+                try:
+                    dialog.unbind_all("<MouseWheel>")
+                except tk.TclError:
+                    pass
+                mousewheel_bound[0] = False
+
+        canvas.bind("<Enter>", _bind_mousewheel)
+        canvas.bind("<Leave>", _unbind_mousewheel)
+        scrollable_frame.bind("<Enter>", _bind_mousewheel)
+        scrollable_frame.bind("<Leave>", _unbind_mousewheel)
+
+        def _on_close():
+            _unbind_mousewheel()
+            dialog.destroy()
+
+        # Bouton fermer avec nettoyage
+        ttk.Button(dialog, text="Fermer", command=_on_close).pack(pady=10)
+        dialog.protocol("WM_DELETE_WINDOW", _on_close)
+
+    def show_shortcuts_help(self):
+        """Affiche la liste des raccourcis clavier."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Raccourcis clavier - Lele")
+        dialog.geometry("500x500")
+        dialog.transient(self.root)
+
+        # Titre
+        ttk.Label(
+            dialog,
+            text="⌨️ Raccourcis clavier",
+            font=("", 14, "bold"),
+        ).pack(pady=(20, 10))
+
+        # Frame avec scrollbar
+        main_frame = ttk.Frame(dialog)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+        # Treeview pour les raccourcis
+        tree = ttk.Treeview(
+            main_frame,
+            columns=("action",),
+            show="headings",
+            height=18,
+        )
+        tree.heading("#0", text="")
+        tree.heading("action", text="Action")
+        tree.column("action", width=350)
+
+        scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+
+        shortcuts = [
+            ("", "── Fichier ──"),
+            ("Ctrl+N", "Nouveau projet"),
+            ("Ctrl+O", "Ouvrir projet"),
+            ("Ctrl+S", "Sauvegarder"),
+            ("Ctrl+Q", "Quitter"),
+            ("", ""),
+            ("", "── Édition ──"),
+            ("Ctrl+Z", "Annuler"),
+            ("Ctrl+Y", "Rétablir"),
+            ("Ctrl+F", "Rechercher"),
+            ("", ""),
+            ("", "── Codage ──"),
+            ("Ctrl+K", "Coder la sélection avec le nœud actif"),
+            ("Ctrl+Shift+N", "Créer un nouveau nœud"),
+            ("Ctrl+Shift+K", "Créer un nœud depuis la sélection et coder"),
+            ("F2", "Renommer le nœud sélectionné"),
+            ("Suppr", "Supprimer le nœud sélectionné"),
+            ("", ""),
+            ("", "── Aide ──"),
+            ("F1", "Afficher l'aide"),
+            ("", ""),
+            ("", "── Actions rapides ──"),
+            ("Double-clic nœud", "Coder la sélection avec ce nœud"),
+            ("Clic droit texte", "Menu contextuel de codage"),
+            ("Clic droit nœud", "Menu contextuel du nœud"),
+        ]
+
+        for shortcut, action in shortcuts:
+            if shortcut == "" and action.startswith("──"):
+                # Ligne de section
+                tree.insert("", tk.END, values=(action,), tags=("section",))
+            elif shortcut == "":
+                # Ligne vide
+                tree.insert("", tk.END, values=("",))
+            else:
+                tree.insert("", tk.END, values=(f"{shortcut}  →  {action}",))
+
+        tree.tag_configure("section", font=("", 10, "bold"))
+
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Bouton fermer
+        ttk.Button(dialog, text="Fermer", command=dialog.destroy).pack(pady=15)
+
     def show_transcription_settings(self):
         """Affiche les paramètres de transcription."""
         dialog = TranscriptionSettingsDialog(
@@ -1219,6 +2207,31 @@ class MainWindow:
             lang_text = self.whisper_language or "auto"
             self.update_status(
                 f"Paramètres de transcription: modèle={self.whisper_model}, langue={lang_text}"
+            )
+
+    def show_llm_settings(self):
+        """Affiche les paramètres IA / LLM."""
+        settings = self.settings_manager.settings
+
+        dialog = LLMSettingsDialog(
+            self.root,
+            llm_provider=settings.llm_provider,
+            llm_model=settings.llm_model,
+            ollama_url=settings.ollama_url,
+            embedding_model=settings.autocoding_embedding_model,
+        )
+        self.root.wait_window(dialog)
+
+        if not dialog.cancelled:
+            # Sauvegarder les paramètres
+            settings.llm_provider = dialog.result_provider
+            settings.llm_model = dialog.result_model
+            settings.ollama_url = dialog.result_ollama_url
+            settings.autocoding_embedding_model = dialog.result_embedding_model
+            self.settings_manager.save()
+
+            self.update_status(
+                f"Paramètres IA: {dialog.result_provider}/{dialog.result_model}"
             )
 
     # --- Rafraîchissement de l'interface ---
@@ -1268,13 +2281,20 @@ class MainWindow:
         def add_nodes(parent_id, tree_parent=""):
             nodes = Node.get_all(self.project.db, parent_id=parent_id)
             for node in nodes:
+                # Configurer le tag pour afficher la couleur du nœud
+                tag_name = f"color_{node.color}"
+                # Créer une version sombre de la couleur pour le texte lisible
+                self.nodes_tree.tag_configure(tag_name, foreground=node.color)
+
+                # Afficher avec un indicateur de couleur
+                display_text = f"● {node.name}"
                 self.nodes_tree.insert(
                     tree_parent,
                     tk.END,
                     iid=node.id,
-                    text=node.name,
+                    text=display_text,
                     values=(node.reference_count,),
-                    tags=(node.color,),
+                    tags=(tag_name,),
                 )
                 # Ajouter récursivement les enfants
                 add_nodes(node.id, node.id)
@@ -1358,12 +2378,33 @@ class MainWindow:
             return
 
         refs = CodeReference.get_by_node(self.project.db, self.selected_node.id)
+
+        # Cache pour éviter de recharger le contenu de la même source plusieurs fois
+        source_contents: dict[str, str] = {}
+
         for ref in refs:
             content = (ref.content or "")[:100]
+
+            # Calculer le numéro de ligne
+            line_num = ""
+            if ref.start_pos is not None:
+                # Récupérer le contenu de la source pour compter les lignes
+                if ref.source_id not in source_contents:
+                    source = Source.get(self.project.db, ref.source_id)
+                    if source and source.content:
+                        source_contents[ref.source_id] = source.content
+                    else:
+                        source_contents[ref.source_id] = ""
+
+                source_content = source_contents.get(ref.source_id, "")
+                if source_content and ref.start_pos <= len(source_content):
+                    # Compter les sauts de ligne avant start_pos
+                    line_num = source_content[:ref.start_pos].count("\n") + 1
+
             self.refs_tree.insert(
                 "",
                 tk.END,
-                values=(ref.source_name, content),
+                values=(ref.source_name, line_num, content),
             )
 
         self.analysis_notebook.select(self.refs_frame)
@@ -1375,14 +2416,48 @@ class MainWindow:
         self.content_text.configure(state=tk.DISABLED)
 
     def update_line_numbers(self):
-        """Met à jour les numéros de ligne."""
+        """
+        Met à jour les numéros de ligne en tenant compte du word-wrap.
+
+        Chaque ligne logique peut occuper plusieurs lignes visuelles.
+        On affiche le numéro uniquement sur la première ligne visuelle,
+        et des espaces sur les lignes de continuation.
+        """
         self.line_numbers.configure(state=tk.NORMAL)
         self.line_numbers.delete("1.0", tk.END)
 
-        line_count = int(self.content_text.index("end-1c").split(".")[0])
-        lines = "\n".join(str(i) for i in range(1, line_count + 1))
-        self.line_numbers.insert("1.0", lines)
+        # Forcer la mise à jour de l'affichage pour avoir les bonnes dimensions
+        self.content_text.update_idletasks()
 
+        line_count = int(self.content_text.index("end-1c").split(".")[0])
+        line_numbers_text = []
+
+        for i in range(1, line_count + 1):
+            # Compter combien de lignes visuelles occupe cette ligne logique
+            # en utilisant count avec "displaylines"
+            start_index = f"{i}.0"
+            end_index = f"{i}.end"
+
+            try:
+                # Compter les lignes d'affichage entre le début et la fin de la ligne
+                display_lines = self.content_text.count(start_index, end_index, "displaylines")
+                if display_lines is None:
+                    display_lines = 1
+                else:
+                    # count retourne un tuple, on prend le premier élément
+                    display_lines = display_lines[0] if isinstance(display_lines, tuple) else display_lines
+                    display_lines = max(1, display_lines)
+            except tk.TclError:
+                display_lines = 1
+
+            # Première ligne visuelle : afficher le numéro
+            line_numbers_text.append(str(i))
+
+            # Lignes de continuation : afficher des espaces
+            for _ in range(display_lines - 1):
+                line_numbers_text.append("")
+
+        self.line_numbers.insert("1.0", "\n".join(line_numbers_text))
         self.line_numbers.configure(state=tk.DISABLED)
 
     def update_status(self, message: str):

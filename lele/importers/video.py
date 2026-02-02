@@ -19,6 +19,7 @@ class VideoImporter(BaseImporter):
         transcribe: bool = True,
         whisper_model: str = "medium",
         language: Optional[str] = None,
+        show_timestamps: bool = False,
         extract_frames: bool = False,
         frame_interval: int = 60,
         **options,
@@ -32,6 +33,7 @@ class VideoImporter(BaseImporter):
             transcribe: Si True, transcrit l'audio
             whisper_model: Modèle Whisper à utiliser
             language: Code de langue
+            show_timestamps: Si True, inclut les horodatages dans le texte
             extract_frames: Si True, extrait des images clés
             frame_interval: Intervalle en secondes entre les frames
         """
@@ -65,16 +67,22 @@ class VideoImporter(BaseImporter):
                 try:
                     audio_path = self._extract_audio(file_path, project_files_path)
 
+                    # Récupérer la durée pour l'estimation
+                    video_duration = extra_metadata.get("duration")
+
                     self.report_progress(0.4, f"Chargement du modèle {whisper_model}...")
 
                     transcript_result = self._transcribe(
-                        audio_path, whisper_model, language
+                        audio_path, whisper_model, language, video_duration
                     )
-                    content = transcript_result["text"]
+                    # Formater le contenu avec sauts de ligne entre segments
+                    segments = transcript_result.get("segments", [])
+                    content = self._format_transcript(segments, show_timestamps)
                     extra_metadata["transcription"] = {
                         "model": whisper_model,
                         "language_detected": transcript_result.get("language"),
-                        "segments": transcript_result.get("segments", []),
+                        "segments": segments,
+                        "show_timestamps": show_timestamps,
                     }
 
                     # Nettoyer le fichier audio temporaire
@@ -246,16 +254,42 @@ class VideoImporter(BaseImporter):
         )
 
     def _transcribe(
-        self, audio_path: Path, model_name: str, language: Optional[str]
+        self,
+        audio_path: Path,
+        model_name: str,
+        language: Optional[str],
+        video_duration: Optional[float] = None,
     ) -> dict:
         """Transcrit un fichier audio avec Whisper."""
         import whisper
+        from ..utils.system import get_whisper_device
 
-        model = whisper.load_model(model_name)
+        device = get_whisper_device()
+        model = whisper.load_model(model_name, device=device)
+
+        # Afficher l'estimation du temps
+        estimated_time = self._estimate_transcription_time(video_duration, model_name, device)
+        duration_str = self._format_duration(video_duration) if video_duration else ""
+        estimate_str = self._format_duration(estimated_time) if estimated_time else ""
+
+        if duration_str and estimate_str:
+            progress_msg = f"Transcription en cours ({device}) - Vidéo: {duration_str}, estimé: ~{estimate_str}"
+        elif duration_str:
+            progress_msg = f"Transcription en cours ({device}) - Vidéo: {duration_str}"
+        else:
+            progress_msg = f"Transcription en cours ({device})..."
+
+        self.report_progress(0.5, progress_msg)
 
         options = {}
         if language:
             options["language"] = language
+
+        # Activer FP16 sur GPU
+        if device == "cuda":
+            options["fp16"] = True
+        else:
+            options["fp16"] = False
 
         result = model.transcribe(str(audio_path), **options)
 
@@ -273,6 +307,97 @@ class VideoImporter(BaseImporter):
             "language": result.get("language"),
             "segments": simplified_segments,
         }
+
+    def _format_transcript(
+        self, segments: list[dict], show_timestamps: bool = False
+    ) -> str:
+        """
+        Formate la transcription avec sauts de ligne entre segments.
+
+        Args:
+            segments: Liste des segments avec start, end, text
+            show_timestamps: Si True, inclut les horodatages
+
+        Returns:
+            Texte formaté avec sauts de ligne
+        """
+        if not segments:
+            return ""
+
+        lines = []
+        for seg in segments:
+            text = seg.get("text", "").strip()
+            if not text:
+                continue
+
+            if show_timestamps:
+                start = self._format_timestamp(seg["start"])
+                end = self._format_timestamp(seg["end"])
+                lines.append(f"[{start} -> {end}] {text}")
+            else:
+                lines.append(text)
+
+        return "\n\n".join(lines)
+
+    @staticmethod
+    def _format_timestamp(seconds: float) -> str:
+        """Formate un timestamp en HH:MM:SS ou MM:SS."""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        return f"{minutes:02d}:{secs:02d}"
+
+    @staticmethod
+    def _format_duration(seconds: Optional[float]) -> str:
+        """Formate une durée en format lisible (ex: '5 min 30 s')."""
+        if seconds is None or seconds <= 0:
+            return ""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        if hours > 0:
+            return f"{hours}h {minutes:02d}min"
+        elif minutes > 0:
+            return f"{minutes} min {secs:02d}s"
+        else:
+            return f"{secs}s"
+
+    @staticmethod
+    def _estimate_transcription_time(
+        video_duration: Optional[float],
+        model_name: str,
+        device: str,
+    ) -> Optional[float]:
+        """
+        Estime le temps de transcription basé sur la durée vidéo, le modèle et le device.
+        """
+        if video_duration is None or video_duration <= 0:
+            return None
+
+        # Facteurs de vitesse approximatifs
+        speed_factors = {
+            "cuda": {
+                "tiny": 0.05, "base": 0.08, "small": 0.15, "medium": 0.3, "large": 0.6,
+            },
+            "cpu": {
+                "tiny": 0.3, "base": 0.5, "small": 1.0, "medium": 2.5, "large": 6.0,
+            },
+        }
+
+        device_key = "cuda" if device == "cuda" else "cpu"
+        model_key = model_name.lower().replace("-", "").replace(".", "")
+        factors = speed_factors.get(device_key, speed_factors["cpu"])
+        factor = factors.get(model_key, factors.get("medium", 1.0))
+
+        estimated = video_duration * factor
+
+        # Overhead pour chargement + extraction audio
+        overhead = {"tiny": 10, "base": 15, "small": 25, "medium": 40, "large": 60}
+        estimated += overhead.get(model_key, 30)
+
+        return estimated
 
     def _extract_frames(
         self, video_path: Path, output_dir: Path, interval: int

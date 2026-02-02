@@ -48,6 +48,7 @@ class TranscriptionSettingsDialog(tk.Toplevel):
         current_model: str = "medium",
         current_language: Optional[str] = None,
         show_transcribe_option: bool = False,
+        current_show_timestamps: bool = False,
     ):
         """
         Initialise le dialogue.
@@ -57,10 +58,12 @@ class TranscriptionSettingsDialog(tk.Toplevel):
             current_model: Modèle Whisper actuel
             current_language: Code de langue actuel (None = auto)
             show_transcribe_option: Si True, affiche l'option pour activer/désactiver la transcription
+            current_show_timestamps: Si True, affiche les timestamps dans la transcription
         """
         super().__init__(parent)
         self.title("Paramètres de transcription")
-        self.geometry("520x580" if show_transcribe_option else "520x530")
+        # Ajuster la hauteur pour les nouvelles options
+        self.geometry("520x650" if show_transcribe_option else "520x600")
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
@@ -69,12 +72,14 @@ class TranscriptionSettingsDialog(tk.Toplevel):
         self.result_model = current_model
         self.result_language = current_language
         self.result_transcribe = True
+        self.result_show_timestamps = current_show_timestamps
         self.cancelled = True
 
         # Variables
         self.model_var = tk.StringVar(value=current_model)
         self.language_var = tk.StringVar()
         self.transcribe_var = tk.BooleanVar(value=True)
+        self.timestamps_var = tk.BooleanVar(value=current_show_timestamps)
         self.show_transcribe_option = show_transcribe_option
 
         self._setup_ui()
@@ -175,6 +180,24 @@ class TranscriptionSettingsDialog(tk.Toplevel):
                 break
         else:
             self.lang_combo.current(0)
+
+        # Options de formatage
+        format_frame = ttk.LabelFrame(main_frame, text="Formatage du texte", padding="10")
+        format_frame.pack(fill=tk.X, pady=(15, 0))
+
+        self.timestamps_check = ttk.Checkbutton(
+            format_frame,
+            text="Afficher les horodatages [00:00 -> 00:05]",
+            variable=self.timestamps_var,
+        )
+        self.timestamps_check.pack(anchor=tk.W)
+
+        ttk.Label(
+            format_frame,
+            text="Le texte sera automatiquement découpé en paragraphes (un par segment)",
+            foreground="#666666",
+            font=("", 9),
+        ).pack(anchor=tk.W, pady=(5, 0))
 
         # Informations matérielles
         hw_frame = ttk.LabelFrame(main_frame, text="Matériel détecté", padding="10")
@@ -309,6 +332,7 @@ class TranscriptionSettingsDialog(tk.Toplevel):
                     widget.configure(state=state)
 
         self.lang_combo.configure(state="readonly" if enabled else tk.DISABLED)
+        self.timestamps_check.configure(state=state)
 
     def _center_window(self, parent):
         """Centre la fenêtre sur son parent."""
@@ -330,6 +354,7 @@ class TranscriptionSettingsDialog(tk.Toplevel):
 
         self.result_language = None if lang_code == "auto" else lang_code
         self.result_transcribe = self.transcribe_var.get()
+        self.result_show_timestamps = self.timestamps_var.get()
         self.cancelled = False
         self.destroy()
 
