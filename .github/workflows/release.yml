@@ -2,13 +2,13 @@ name: Build and Release
 
 on:
   push:
-    branches: [main]
+    tags:
+      - 'v*'  # Déclenche sur les tags comme v1.0.0, v2.1.3, etc.
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g., v1.0.0)'
-        required: false
-        default: ''
+        description: 'Version (e.g., 1.0.0 - sans le préfixe v)'
+        required: true
 
 env:
   PYTHON_VERSION: '3.11'
@@ -29,10 +29,15 @@ jobs:
         id: version
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
+            # Workflow dispatch: utiliser la version fournie
             VERSION="${{ github.event.inputs.version }}"
+            # Ajouter le préfixe v si absent
+            if [[ ! "$VERSION" =~ ^v ]]; then
+              VERSION="v${VERSION}"
+            fi
           else
-            # Auto-increment based on date and run number
-            VERSION="v$(date +%Y.%m.%d)-${{ github.run_number }}"
+            # Tag push: extraire la version depuis le tag
+            VERSION="${GITHUB_REF#refs/tags/}"
           fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "tag=${VERSION}" >> $GITHUB_OUTPUT
@@ -190,16 +195,3 @@ jobs:
             Voir les commits ci-dessous pour les détails.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # Nettoyer les anciens artifacts
-  cleanup:
-    needs: release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Delete artifacts
-        uses: geekyeggo/delete-artifact@v2
-        with:
-          name: |
-            Lele-cpu
-            Lele-cuda
-            Lele-Installer
