@@ -2,8 +2,7 @@ name: Build and Release
 
 on:
   push:
-    tags:
-      - 'v*'  # Déclenche sur les tags comme v1.0.0, v2.1.3, etc.
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
@@ -20,6 +19,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
+      skip: ${{ steps.version.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,17 +35,74 @@ jobs:
             if [[ ! "$VERSION" =~ ^v ]]; then
               VERSION="v${VERSION}"
             fi
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
+            echo "tag=${VERSION}" >> $GITHUB_OUTPUT
+            echo "skip=false" >> $GITHUB_OUTPUT
           else
-            # Tag push: extraire la version depuis le tag
-            VERSION="${GITHUB_REF#refs/tags/}"
+            # Push sur main: calculer la version sémantique
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+            echo "Latest tag: ${LATEST_TAG}"
+
+            # Extraire major.minor.patch
+            TAG_VERSION=${LATEST_TAG#v}
+            MAJOR=$(echo $TAG_VERSION | cut -d. -f1)
+            MINOR=$(echo $TAG_VERSION | cut -d. -f2)
+            PATCH=$(echo $TAG_VERSION | cut -d. -f3)
+
+            # Analyser les commits depuis le dernier tag
+            if [ "$LATEST_TAG" = "v0.0.0" ]; then
+              COMMITS=$(git log --oneline)
+            else
+              COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline)
+            fi
+
+            echo "Commits since ${LATEST_TAG}:"
+            echo "$COMMITS"
+
+            # Pas de nouveaux commits = pas de release
+            if [ -z "$COMMITS" ]; then
+              echo "skip=true" >> $GITHUB_OUTPUT
+              echo "No new commits, skipping release"
+              exit 0
+            fi
+
+            # Déterminer le type de bump selon semantic versioning
+            BUMP="patch"
+
+            if echo "$COMMITS" | grep -qiE "(BREAKING CHANGE|!:)"; then
+              BUMP="major"
+            elif echo "$COMMITS" | grep -qiE "^[a-f0-9]+ feat(\(|:)"; then
+              BUMP="minor"
+            fi
+
+            # Calculer la nouvelle version
+            case $BUMP in
+              major)
+                MAJOR=$((MAJOR + 1))
+                MINOR=0
+                PATCH=0
+                ;;
+              minor)
+                MINOR=$((MINOR + 1))
+                PATCH=0
+                ;;
+              patch)
+                PATCH=$((PATCH + 1))
+                ;;
+            esac
+
+            NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+            echo "version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+            echo "tag=${NEW_VERSION}" >> $GITHUB_OUTPUT
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "Bump type: ${BUMP}"
+            echo "New version: ${NEW_VERSION}"
           fi
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "tag=${VERSION}" >> $GITHUB_OUTPUT
-          echo "Version: ${VERSION}"
 
   # Build version CPU
   build-cpu:
     needs: version
+    if: needs.version.outputs.skip != 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -82,6 +139,7 @@ jobs:
   # Build version CUDA
   build-cuda:
     needs: version
+    if: needs.version.outputs.skip != 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -118,6 +176,7 @@ jobs:
   # Build installeur
   build-installer:
     needs: version
+    if: needs.version.outputs.skip != 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -145,11 +204,28 @@ jobs:
   # Créer la release
   release:
     needs: [version, build-cpu, build-cuda, build-installer]
+    if: needs.version.outputs.skip != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create and push tag
+        run: |
+          VERSION="${{ needs.version.outputs.tag }}"
+          # Vérifier si le tag existe déjà
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists, skipping tag creation"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "${VERSION}" -m "Release ${VERSION}"
+            git push origin "${VERSION}"
+            echo "Created and pushed tag: ${VERSION}"
+          fi
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
