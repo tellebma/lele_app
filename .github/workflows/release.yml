@@ -1,0 +1,205 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: false
+        default: ''
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # Déterminer la version
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Auto-increment based on date and run number
+            VERSION="v$(date +%Y.%m.%d)-${{ github.run_number }}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}"
+
+  # Build version CPU
+  build-cpu:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies (CPU)
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements-cpu.txt
+
+      - name: Build application
+        run: |
+          python -m PyInstaller lele.spec --noconfirm
+
+      - name: Create ZIP archive
+        run: |
+          cd dist
+          Compress-Archive -Path Lele -DestinationPath Lele-cpu.zip
+        shell: pwsh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lele-cpu
+          path: dist/Lele-cpu.zip
+          retention-days: 1
+
+  # Build version CUDA
+  build-cuda:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies (CUDA)
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements-cuda.txt
+
+      - name: Build application
+        run: |
+          python -m PyInstaller lele.spec --noconfirm
+
+      - name: Create ZIP archive
+        run: |
+          cd dist
+          Compress-Archive -Path Lele -DestinationPath Lele-cuda.zip
+        shell: pwsh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lele-cuda
+          path: dist/Lele-cuda.zip
+          retention-days: 1
+
+  # Build installeur
+  build-installer:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build installer
+        run: |
+          cd installer
+          python -m PyInstaller --onefile --windowed --name Lele-Installer installer.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lele-Installer
+          path: installer/dist/Lele-Installer.exe
+          retention-days: 1
+
+  # Créer la release
+  release:
+    needs: [version, build-cpu, build-cuda, build-installer]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: |
+          echo "=== Artifacts ==="
+          find artifacts -type f -ls
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: Lele ${{ needs.version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            artifacts/Lele-cpu/Lele-cpu.zip
+            artifacts/Lele-cuda/Lele-cuda.zip
+            artifacts/Lele-Installer/Lele-Installer.exe
+          body: |
+            ## Lele ${{ needs.version.outputs.version }}
+
+            ### Téléchargements
+
+            | Fichier | Description |
+            |---------|-------------|
+            | **Lele-Installer.exe** | 🚀 Installeur intelligent (détecte automatiquement GPU) |
+            | Lele-cpu.zip | Version CPU (~500 MB) - Compatible tous PC |
+            | Lele-cuda.zip | Version GPU (~2.5 GB) - Nécessite NVIDIA |
+
+            ### Installation
+
+            1. Téléchargez **Lele-Installer.exe**
+            2. Exécutez-le (Windows peut afficher un avertissement, cliquez "Plus d'infos" puis "Exécuter quand même")
+            3. L'installeur détecte automatiquement votre GPU et télécharge la bonne version
+
+            ### Nouveautés
+
+            Voir les commits ci-dessous pour les détails.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Nettoyer les anciens artifacts
+  cleanup:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete artifacts
+        uses: geekyeggo/delete-artifact@v2
+        with:
+          name: |
+            Lele-cpu
+            Lele-cuda
+            Lele-Installer

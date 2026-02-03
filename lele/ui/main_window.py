@@ -18,7 +18,6 @@ from ..models.project import Project
 from ..models.source import Source, SourceType
 from ..models.node import Node
 from ..models.coding import CodeReference
-from ..models.memo import Memo
 from ..importers import get_importer
 from ..utils.settings import get_settings_manager
 from .dialogs import (
@@ -52,6 +51,10 @@ class MainWindow:
         self.project: Optional[Project] = None
         self.current_source: Optional[Source] = None
         self.selected_node: Optional[Node] = None
+
+        # Mode édition (lecture seule par défaut)
+        self.edit_mode = False
+        self.original_content: str | None = None  # Pour détecter les changements
 
         # Gestionnaire de paramètres
         self.settings_manager = get_settings_manager()
@@ -138,15 +141,10 @@ class MainWindow:
             label="🔮 Détection automatique de nœuds...",
             command=self.auto_detect_nodes
         )
-        coding_menu.add_separator()
-        coding_menu.add_command(label="Gérer les nœuds...", command=self.manage_nodes)
 
         # Menu Analyse
         analysis_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Analyse", menu=analysis_menu)
-        analysis_menu.add_command(label="Requête de codage...", command=self.coding_query)
-        analysis_menu.add_command(label="Matrice...", command=self.show_matrix)
-        analysis_menu.add_separator()
         analysis_menu.add_command(label="Nuage de mots", command=self.show_wordcloud)
         analysis_menu.add_command(label="Carte mentale", command=self.show_mindmap)
         analysis_menu.add_command(label="Sociogramme", command=self.show_sociogram)
@@ -188,11 +186,22 @@ class MainWindow:
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
 
         ttk.Button(toolbar, text="🏷️ Coder", command=self.code_selection).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="📝 Mémo", command=self.create_memo).pack(side=tk.LEFT, padx=2)
 
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
 
         ttk.Button(toolbar, text="🔍 Rechercher", command=self.show_search).pack(side=tk.LEFT, padx=2)
+
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+
+        # Boutons mode édition
+        self.edit_btn = ttk.Button(toolbar, text="✏️ Éditer", command=self.toggle_edit_mode)
+        self.edit_btn.pack(side=tk.LEFT, padx=2)
+
+        self.save_edit_btn = ttk.Button(toolbar, text="💾 Enregistrer", command=self.save_edit)
+        # Caché par défaut (affiché en mode édition)
+
+        self.cancel_edit_btn = ttk.Button(toolbar, text="✖️ Annuler", command=self.cancel_edit)
+        # Caché par défaut (affiché en mode édition)
 
         # Recherche rapide
         ttk.Label(toolbar, text="  ").pack(side=tk.LEFT)
@@ -225,13 +234,6 @@ class MainWindow:
         self.nav_notebook.add(self.nodes_frame, text="Nœuds")
         self.setup_nodes_panel()
 
-        # Onglet Cas
-        self.cases_frame = ttk.Frame(self.nav_notebook)
-        self.nav_notebook.add(self.cases_frame, text="Cas")
-
-        # Onglet Mémos
-        self.memos_frame = ttk.Frame(self.nav_notebook)
-        self.nav_notebook.add(self.memos_frame, text="Mémos")
 
         # Panneau central (contenu)
         self.center_paned = ttk.PanedWindow(self.main_paned, orient=tk.VERTICAL)
@@ -294,6 +296,10 @@ class MainWindow:
 
         self.sources_tree.bind("<<TreeviewSelect>>", self.on_source_select)
         self.sources_tree.bind("<Double-1>", self.on_source_double_click)
+        self.sources_tree.bind("<Button-3>", self._show_source_context_menu)
+
+        # Menu contextuel pour les sources
+        self.source_context_menu = tk.Menu(self.sources_tree, tearoff=0)
 
         # Drop zone pour le drag & drop
         if DND_AVAILABLE:
@@ -314,7 +320,7 @@ class MainWindow:
         ttk.Button(
             btn_frame,
             text="🔮 Auto",
-            width=6,
+            width=8,
             command=self.auto_detect_nodes,
         ).pack(side=tk.RIGHT)
 
@@ -342,7 +348,6 @@ class MainWindow:
 
         # Menu contextuel sur les nœuds
         self.node_context_menu = tk.Menu(self.nodes_tree, tearoff=0)
-        self.nodes_tree.bind("<Double-1>", self.on_node_double_click)
 
     def setup_content_area(self):
         """Configure la zone de contenu principale."""
@@ -474,33 +479,24 @@ class MainWindow:
         self.refs_tree.column("content", width=400)
         self.refs_tree.pack(fill=tk.BOTH, expand=True)
 
+        # Bindings pour navigation et suppression
+        self.refs_tree.bind("<Double-1>", self._on_ref_double_click)
+        self.refs_tree.bind("<Button-3>", self._show_refs_context_menu)
+        self.refs_tree.bind("<Delete>", self._delete_selected_ref)
+
+        # Menu contextuel pour les références
+        self.refs_context_menu = tk.Menu(self.refs_tree, tearoff=0)
+
     def setup_right_panel(self):
-        """Configure le panneau droit (propriétés/codage)."""
-        # Notebook pour les propriétés
-        self.props_notebook = ttk.Notebook(self.right_panel)
-        self.props_notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Propriétés de l'élément sélectionné
-        self.props_frame = ttk.Frame(self.props_notebook)
-        self.props_notebook.add(self.props_frame, text="Propriétés")
-
-        ttk.Label(self.props_frame, text="Propriétés", style="Title.TLabel").pack(
+        """Configure le panneau droit (codages du document)."""
+        # Titre
+        ttk.Label(self.right_panel, text="Codages du document", style="Title.TLabel").pack(
             anchor=tk.W, padx=10, pady=(10, 5)
         )
 
-        self.props_content = ttk.Frame(self.props_frame)
-        self.props_content.pack(fill=tk.BOTH, expand=True, padx=10)
-
-        # Codages du document actuel
-        self.doc_codes_frame = ttk.Frame(self.props_notebook)
-        self.props_notebook.add(self.doc_codes_frame, text="Codages")
-
-        ttk.Label(self.doc_codes_frame, text="Codages du document", style="Title.TLabel").pack(
-            anchor=tk.W, padx=10, pady=(10, 5)
-        )
-
+        # Arbre des codages
         self.doc_codes_tree = ttk.Treeview(
-            self.doc_codes_frame,
+            self.right_panel,
             columns=("pos",),
             show="tree headings",
             height=10,
@@ -511,9 +507,13 @@ class MainWindow:
         self.doc_codes_tree.column("pos", width=80)
         self.doc_codes_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
-        # Annotations
-        self.annotations_frame = ttk.Frame(self.props_notebook)
-        self.props_notebook.add(self.annotations_frame, text="Annotations")
+        # Bindings pour navigation et suppression
+        self.doc_codes_tree.bind("<Double-1>", self._on_doc_code_double_click)
+        self.doc_codes_tree.bind("<Button-3>", self._show_doc_codes_context_menu)
+        self.doc_codes_tree.bind("<Delete>", self._delete_selected_doc_code)
+
+        # Menu contextuel pour les codages
+        self.doc_codes_context_menu = tk.Menu(self.doc_codes_tree, tearoff=0)
 
     def setup_status_bar(self):
         """Configure la barre de statut."""
@@ -522,6 +522,15 @@ class MainWindow:
 
         self.status_label = ttk.Label(self.status_bar, text="Prêt")
         self.status_label.pack(side=tk.LEFT, padx=10, pady=5)
+
+        # Indicateur de mode édition
+        self.mode_label = ttk.Label(
+            self.status_bar,
+            text="🔒 Lecture seule",
+            foreground="#666666",
+            font=("", 9),
+        )
+        self.mode_label.pack(side=tk.LEFT, padx=20, pady=5)
 
         self.project_label = ttk.Label(self.status_bar, text="Aucun projet")
         self.project_label.pack(side=tk.RIGHT, padx=10, pady=5)
@@ -544,6 +553,10 @@ class MainWindow:
         self.root.bind("<Control-Shift-K>", lambda e: self._quick_code_from_selection())
         self.root.bind("<F2>", lambda e: self._rename_node() if self.selected_node else None)
         self.root.bind("<Delete>", lambda e: self._delete_if_node_focused())
+
+        # Mode édition
+        self.root.bind("<Control-e>", lambda e: self.toggle_edit_mode())
+        self.root.bind("<Escape>", lambda e: self.cancel_edit() if self.edit_mode else None)
 
         # Aide
         self.root.bind("<F1>", lambda e: self.show_help())
@@ -633,14 +646,17 @@ class MainWindow:
         dialog.transient(self.root)
         dialog.grab_set()
 
-        ttk.Label(dialog, text="Nom du projet:").pack(padx=20, pady=(20, 5), anchor=tk.W)
-        name_var = tk.StringVar()
-        ttk.Entry(dialog, textvariable=name_var, width=40).pack(padx=20, pady=5)
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(dialog, text="Emplacement:").pack(padx=20, pady=(10, 5), anchor=tk.W)
+        ttk.Label(main_frame, text="Nom du projet:").pack(anchor=tk.W)
+        name_var = tk.StringVar()
+        ttk.Entry(main_frame, textvariable=name_var, width=40).pack(pady=5, fill=tk.X)
+
+        ttk.Label(main_frame, text="Emplacement:").pack(pady=(10, 0), anchor=tk.W)
         path_var = tk.StringVar()
-        path_frame = ttk.Frame(dialog)
-        path_frame.pack(padx=20, pady=5, fill=tk.X)
+        path_frame = ttk.Frame(main_frame)
+        path_frame.pack(pady=5, fill=tk.X)
         ttk.Entry(path_frame, textvariable=path_var, width=30).pack(side=tk.LEFT, expand=True, fill=tk.X)
         ttk.Button(
             path_frame,
@@ -672,7 +688,7 @@ class MainWindow:
             except Exception as e:
                 messagebox.showerror("Erreur", f"Erreur lors de la création: {e}")
 
-        ttk.Button(dialog, text="Créer", command=create).pack(pady=20)
+        ttk.Button(main_frame, text="Créer", command=create).pack(pady=(15, 0))
 
     def open_project(self):
         """Ouvre un projet existant."""
@@ -936,10 +952,48 @@ class MainWindow:
             self.import_files_list(files)
 
     def export_project(self):
-        """Exporte le projet."""
+        """Exporte le projet au format REFI-QDA (.qdpx)."""
         if not self.project:
+            messagebox.showwarning("Export", "Aucun projet ouvert.")
             return
-        # TODO: Implémenter l'export REFI-QDA
+
+        # Dialogue de sauvegarde
+        from pathlib import Path
+        filepath = filedialog.asksaveasfilename(
+            title="Exporter le projet",
+            defaultextension=".qdpx",
+            filetypes=[
+                ("REFI-QDA Project", "*.qdpx"),
+                ("Tous les fichiers", "*.*")
+            ],
+            initialfile=f"{self.project.name}.qdpx"
+        )
+
+        if not filepath:
+            return  # Annulé par l'utilisateur
+
+        # Exporter via RefiQdaImporter
+        from lele.importers.refi_qda import RefiQdaImporter
+
+        try:
+            exporter = RefiQdaImporter()
+            success = exporter.export_project(self.project, Path(filepath))
+
+            if success:
+                messagebox.showinfo(
+                    "Export réussi",
+                    f"Le projet a été exporté avec succès vers:\n{filepath}"
+                )
+            else:
+                messagebox.showerror(
+                    "Erreur d'export",
+                    "L'export a échoué. Vérifiez les permissions du fichier."
+                )
+        except Exception as e:
+            messagebox.showerror(
+                "Erreur d'export",
+                f"Une erreur est survenue lors de l'export:\n{str(e)}"
+            )
 
     def quit_app(self):
         """Quitte l'application."""
@@ -963,6 +1017,138 @@ class MainWindow:
         except tk.TclError:
             pass  # Rien à rétablir
 
+    # --- Mode édition ---
+
+    def toggle_edit_mode(self):
+        """Bascule entre mode lecture et mode édition."""
+        if not self.current_source:
+            messagebox.showinfo("Information", "Aucun document ouvert.")
+            return
+
+        if self.edit_mode:
+            # Vérifier s'il y a des modifications non sauvegardées
+            if self._has_unsaved_changes():
+                result = messagebox.askyesnocancel(
+                    "Modifications non sauvegardées",
+                    "Voulez-vous enregistrer les modifications avant de quitter le mode édition?",
+                )
+                if result is None:  # Cancel
+                    return
+                elif result:  # Yes - sauvegarder
+                    self.save_edit()
+                    return
+                # No - annuler les modifications
+                self.cancel_edit()
+                return
+            self._set_edit_mode(False)
+        else:
+            self._set_edit_mode(True)
+
+    def _set_edit_mode(self, enabled: bool):
+        """Active ou désactive le mode édition avec tous les changements visuels."""
+        self.edit_mode = enabled
+
+        if enabled:
+            # Activer le mode édition
+            self.original_content = self.content_text.get("1.0", tk.END)
+            self.content_text.configure(
+                state=tk.NORMAL,
+                background="#ffffff",
+                relief=tk.SOLID,
+                borderwidth=2,
+            )
+
+            # Mettre à jour les boutons
+            self.edit_btn.configure(text="✏️ Édition", state=tk.DISABLED)
+            self.save_edit_btn.pack(side=tk.LEFT, padx=2, after=self.edit_btn)
+            self.cancel_edit_btn.pack(side=tk.LEFT, padx=2, after=self.save_edit_btn)
+
+            # Mettre à jour l'indicateur de statut
+            self.mode_label.configure(
+                text="✏️ Mode édition",
+                foreground="#0066cc",
+                font=("", 9, "bold"),
+            )
+
+            self.update_status("Mode édition activé - Ctrl+S pour sauvegarder, Échap pour annuler")
+
+        else:
+            # Désactiver le mode édition
+            self.original_content = None
+            self.content_text.configure(
+                state=tk.DISABLED,
+                background="#f8f8f8",
+                relief=tk.FLAT,
+                borderwidth=0,
+            )
+
+            # Mettre à jour les boutons
+            self.edit_btn.configure(text="✏️ Éditer", state=tk.NORMAL)
+            self.save_edit_btn.pack_forget()
+            self.cancel_edit_btn.pack_forget()
+
+            # Mettre à jour l'indicateur de statut
+            self.mode_label.configure(
+                text="🔒 Lecture seule",
+                foreground="#666666",
+                font=("", 9),
+            )
+
+            self.update_status("Mode lecture seule")
+
+    def _has_unsaved_changes(self) -> bool:
+        """Vérifie s'il y a des modifications non sauvegardées."""
+        if not self.edit_mode or self.original_content is None:
+            return False
+        current_content = self.content_text.get("1.0", tk.END)
+        return current_content != self.original_content
+
+    def save_edit(self):
+        """Enregistre les modifications du document."""
+        if not self.edit_mode or not self.current_source:
+            return
+
+        # Récupérer le contenu modifié
+        new_content = self.content_text.get("1.0", tk.END).rstrip("\n")
+
+        # Mettre à jour la source
+        self.current_source.content = new_content
+        self.current_source.save(self.project.db)
+
+        # Réinitialiser le contenu original
+        self.original_content = self.content_text.get("1.0", tk.END)
+
+        self.update_status("Modifications enregistrées")
+
+        # Quitter le mode édition
+        self._set_edit_mode(False)
+
+        # Rafraîchir l'affichage
+        self.display_source()
+
+    def cancel_edit(self):
+        """Annule les modifications et restaure le contenu original."""
+        if not self.edit_mode:
+            return
+
+        if self._has_unsaved_changes():
+            if not messagebox.askyesno(
+                "Annuler les modifications",
+                "Voulez-vous vraiment annuler toutes les modifications?"
+            ):
+                return
+
+        # Restaurer le contenu original
+        if self.original_content is not None:
+            self.content_text.configure(state=tk.NORMAL)
+            self.content_text.delete("1.0", tk.END)
+            self.content_text.insert("1.0", self.original_content.rstrip("\n"))
+
+        # Quitter le mode édition
+        self._set_edit_mode(False)
+
+        self.update_status("Modifications annulées")
+
     # --- Actions de codage ---
 
     def create_node(self, initial_name: str = "", parent_node: Node | None = None, code_selection: bool = False):
@@ -982,27 +1168,31 @@ class MainWindow:
         dialog.transient(self.root)
         dialog.grab_set()
 
+        # Frame principal avec style ttk standard
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
         # Nom
-        ttk.Label(dialog, text="Nom du nœud:", font=("", 10, "bold")).pack(
+        ttk.Label(main_frame, text="Nom du nœud:", font=("", 10, "bold")).pack(
             padx=20, pady=(20, 5), anchor=tk.W
         )
         name_var = tk.StringVar(value=initial_name)
-        name_entry = ttk.Entry(dialog, textvariable=name_var, width=45)
+        name_entry = ttk.Entry(main_frame, textvariable=name_var, width=45)
         name_entry.pack(padx=20, pady=5)
         name_entry.focus_set()
         name_entry.select_range(0, tk.END)
 
         # Description
-        ttk.Label(dialog, text="Description (optionnel):").pack(padx=20, pady=(10, 5), anchor=tk.W)
+        ttk.Label(main_frame, text="Description (optionnel):").pack(pady=(10, 5), anchor=tk.W)
         desc_var = tk.StringVar()
-        ttk.Entry(dialog, textvariable=desc_var, width=45).pack(padx=20, pady=5)
+        ttk.Entry(main_frame, textvariable=desc_var, width=45).pack(pady=5)
 
         # Couleur
-        ttk.Label(dialog, text="Couleur:", font=("", 10, "bold")).pack(padx=20, pady=(15, 5), anchor=tk.W)
+        ttk.Label(main_frame, text="Couleur:", font=("", 10, "bold")).pack(pady=(15, 5), anchor=tk.W)
         color_var = tk.StringVar(value="#3498db")
 
-        color_frame = ttk.Frame(dialog)
-        color_frame.pack(padx=20, pady=5, fill=tk.X)
+        color_frame = ttk.Frame(main_frame)
+        color_frame.pack(pady=5, fill=tk.X)
 
         # Palette de couleurs étendue
         colors = [
@@ -1028,34 +1218,34 @@ class MainWindow:
             self._color_buttons.append((btn, color))
 
         # Indicateur de couleur sélectionnée
-        preview_frame = ttk.Frame(dialog)
-        preview_frame.pack(padx=20, pady=10, fill=tk.X)
+        preview_frame = ttk.Frame(main_frame)
+        preview_frame.pack(pady=10, fill=tk.X)
 
         ttk.Label(preview_frame, text="Aperçu:").pack(side=tk.LEFT)
-        self._color_preview = tk.Label(
+        self._color_preview = ttk.Label(
             preview_frame,
             text="  ●  Exemple de nœud",
-            fg=color_var.get(),
+            foreground=color_var.get(),
             font=("", 11),
         )
         self._color_preview.pack(side=tk.LEFT, padx=10)
 
         def update_preview(*args):
-            self._color_preview.configure(fg=color_var.get())
+            self._color_preview.configure(foreground=color_var.get())
         color_var.trace_add("write", update_preview)
 
         # Parent
         if parent_node:
             parent_label = ttk.Label(
-                dialog,
+                main_frame,
                 text=f"📁 Parent: {parent_node.name}",
                 foreground="#666",
             )
-            parent_label.pack(padx=20, anchor=tk.W)
+            parent_label.pack(anchor=tk.W)
 
         # Boutons
-        btn_frame = ttk.Frame(dialog)
-        btn_frame.pack(pady=20, fill=tk.X, padx=20)
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(pady=20, fill=tk.X)
 
         def create():
             name = name_var.get().strip()
@@ -1102,6 +1292,29 @@ class MainWindow:
     def _show_text_context_menu(self, event):
         """Affiche le menu contextuel sur le texte."""
         self.text_context_menu.delete(0, tk.END)
+
+        # Détecter si on clique sur une zone codée
+        click_index = self.content_text.index(f"@{event.x},{event.y}")
+        clicked_ref = self._get_reference_at_position(click_index)
+
+        # Options pour une référence existante
+        if clicked_ref and self.project:
+            node = Node.get(self.project.db, clicked_ref.node_id)
+            node_name = node.name if node else "inconnu"
+
+            self.text_context_menu.add_command(
+                label=f"🏷️ Référence: {node_name}",
+                state=tk.DISABLED,
+            )
+            self.text_context_menu.add_command(
+                label="🔄 Changer le nœud...",
+                command=lambda r=clicked_ref: self._change_reference_node(r),
+            )
+            self.text_context_menu.add_command(
+                label="🗑️ Supprimer cette référence",
+                command=lambda r=clicked_ref: self._delete_reference(r),
+            )
+            self.text_context_menu.add_separator()
 
         # Vérifier s'il y a une sélection
         has_selection = False
@@ -1300,24 +1513,336 @@ class MainWindow:
         self.code_selection()
         self.selected_node = old_selected
 
-    def _show_all_nodes_for_coding(self):
-        """Affiche un dialogue pour sélectionner un nœud parmi tous."""
+    # ===== Handlers pour les références (refs_tree) =====
+
+    def _on_ref_double_click(self, event):
+        """Double-clic sur une référence : naviguer vers la source et position."""
+        selection = self.refs_tree.selection()
+        if not selection:
+            return
+
+        item_id = selection[0]
+        ref_id = self.refs_tree.item(item_id, "tags")
+        if not ref_id:
+            return
+        ref_id = ref_id[0]
+
+        # Récupérer la référence
+        ref = CodeReference.get(self.project.db, ref_id)
+        if not ref:
+            return
+
+        # Charger la source correspondante
+        source = Source.get(self.project.db, ref.source_id)
+        if not source:
+            return
+
+        # Afficher la source
+        self.current_source = source
+        self.display_source()
+
+        # Sélectionner l'item dans sources_tree
+        for item in self.sources_tree.get_children():
+            if self.sources_tree.item(item, "tags") and self.sources_tree.item(item, "tags")[0] == source.id:
+                self.sources_tree.selection_set(item)
+                self.sources_tree.see(item)
+                break
+
+        # Naviguer vers la position dans le texte
+        self._scroll_to_position(ref.start_pos, ref.end_pos)
+
+    def _scroll_to_position(self, start_pos: int, end_pos: int):
+        """Scroll le texte vers une position et surligne le passage."""
+        # Convertir les positions en indices Tkinter
+        start_index = f"1.0+{start_pos}c"
+        end_index = f"1.0+{end_pos}c"
+
+        # Supprimer l'ancien surlignage de sélection
+        self.content_text.tag_remove("selection", "1.0", tk.END)
+
+        # Surligner le passage
+        self.content_text.tag_add("selection", start_index, end_index)
+
+        # Scroll pour rendre visible
+        self.content_text.see(start_index)
+        self.content_text.mark_set(tk.INSERT, start_index)
+
+    def _show_refs_context_menu(self, event):
+        """Affiche le menu contextuel pour les références."""
+        # Sélectionner l'item sous le curseur
+        item = self.refs_tree.identify_row(event.y)
+        if item:
+            self.refs_tree.selection_set(item)
+
+        self.refs_context_menu.delete(0, tk.END)
+
+        if item:
+            self.refs_context_menu.add_command(
+                label="📍 Aller à la source",
+                command=lambda: self._on_ref_double_click(None)
+            )
+            self.refs_context_menu.add_separator()
+            self.refs_context_menu.add_command(
+                label="🗑️ Supprimer cette référence",
+                command=self._delete_selected_ref
+            )
+
+        self.refs_context_menu.tk_popup(event.x_root, event.y_root)
+
+    def _delete_selected_ref(self, event=None):
+        """Supprime la référence sélectionnée."""
+        selection = self.refs_tree.selection()
+        if not selection:
+            return
+
+        item_id = selection[0]
+        ref_id = self.refs_tree.item(item_id, "tags")
+        if not ref_id:
+            return
+        ref_id = ref_id[0]
+
+        # Confirmer la suppression
+        if not messagebox.askyesno(
+            "Confirmer la suppression",
+            "Voulez-vous vraiment supprimer cette référence de codage ?"
+        ):
+            return
+
+        # Supprimer la référence
+        ref = CodeReference.get(self.project.db, ref_id)
+        if ref:
+            ref.delete(self.project.db)
+
+            # Rafraîchir les affichages
+            self.display_node_references()
+            if self.current_source:
+                self.refresh_document_codes()
+                self.display_source()
+            self.refresh_nodes()
+
+            self.update_status("Référence supprimée")
+
+    # ===== Handlers pour les codages du document (doc_codes_tree) =====
+
+    def _on_doc_code_double_click(self, event):
+        """Double-clic sur un codage : naviguer vers la position dans le texte."""
+        selection = self.doc_codes_tree.selection()
+        if not selection:
+            return
+
+        item_id = selection[0]
+        # L'ID de l'item est l'ID de la référence
+        ref_id = item_id
+
+        # Récupérer la référence
+        ref = CodeReference.get(self.project.db, ref_id)
+        if not ref:
+            return
+
+        # Naviguer vers la position
+        self._scroll_to_position(ref.start_pos, ref.end_pos)
+
+    def _show_doc_codes_context_menu(self, event):
+        """Affiche le menu contextuel pour les codages du document."""
+        # Sélectionner l'item sous le curseur
+        item = self.doc_codes_tree.identify_row(event.y)
+        if item:
+            self.doc_codes_tree.selection_set(item)
+
+        self.doc_codes_context_menu.delete(0, tk.END)
+
+        if item:
+            self.doc_codes_context_menu.add_command(
+                label="📍 Aller à cette position",
+                command=lambda: self._on_doc_code_double_click(None)
+            )
+            self.doc_codes_context_menu.add_separator()
+            self.doc_codes_context_menu.add_command(
+                label="🗑️ Supprimer ce codage",
+                command=self._delete_selected_doc_code
+            )
+
+        self.doc_codes_context_menu.tk_popup(event.x_root, event.y_root)
+
+    def _delete_selected_doc_code(self, event=None):
+        """Supprime le codage sélectionné dans le document."""
+        selection = self.doc_codes_tree.selection()
+        if not selection:
+            return
+
+        item_id = selection[0]
+        ref_id = item_id
+
+        # Confirmer la suppression
+        if not messagebox.askyesno(
+            "Confirmer la suppression",
+            "Voulez-vous vraiment supprimer ce codage ?"
+        ):
+            return
+
+        # Supprimer la référence
+        ref = CodeReference.get(self.project.db, ref_id)
+        if ref:
+            ref.delete(self.project.db)
+
+            # Rafraîchir les affichages
+            self.refresh_document_codes()
+            if self.current_source:
+                self.display_source()
+            self.refresh_nodes()
+            if self.selected_node:
+                self.display_node_references()
+
+            self.update_status("Codage supprimé")
+
+    def _get_reference_at_position(self, index: str) -> CodeReference | None:
+        """Trouve une référence de codage à la position donnée dans le texte.
+
+        Args:
+            index: Index Tkinter (ex: "1.0", "2.5")
+
+        Returns:
+            CodeReference si trouvée, None sinon
+        """
+        if not self.project or not self.current_source:
+            return None
+
+        # Convertir l'index Tkinter en position caractère
+        char_count = self.content_text.count("1.0", index, "chars")
+        if not char_count:
+            return None
+        char_pos = char_count[0]
+
+        # Chercher parmi les références de ce document
+        refs = CodeReference.get_by_source(self.project.db, self.current_source.id)
+        for ref in refs:
+            if ref.start_pos <= char_pos < ref.end_pos:
+                return ref
+
+        return None
+
+    def _change_reference_node(self, ref: CodeReference):
+        """Affiche un dialogue pour changer le nœud d'une référence."""
         if not self.project:
             return
 
         dialog = tk.Toplevel(self.root)
-        dialog.title("Sélectionner un nœud")
+        dialog.title("Changer le noeud")
         dialog.geometry("350x400")
         dialog.transient(self.root)
         dialog.grab_set()
 
-        ttk.Label(dialog, text="Choisissez un nœud pour coder la sélection:").pack(
-            padx=20, pady=(20, 10), anchor=tk.W
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Texte de la référence
+        content_preview = ref.content[:50] + "..." if len(ref.content) > 50 else ref.content
+        ttk.Label(
+            main_frame,
+            text=f"Texte: \"{content_preview}\"",
+            wraplength=300
+        ).pack(anchor=tk.W)
+
+        ttk.Label(main_frame, text="Choisissez le nouveau noeud:").pack(
+            pady=(10, 5), anchor=tk.W
         )
 
         # Liste des nœuds
-        tree_frame = ttk.Frame(dialog)
-        tree_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=5)
+        list_frame = ttk.Frame(main_frame)
+        list_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        node_list = tk.Listbox(list_frame, yscrollcommand=scrollbar.set)
+        node_list.pack(fill=tk.BOTH, expand=True)
+        scrollbar.config(command=node_list.yview)
+
+        nodes = Node.get_all(self.project.db)
+        for node in nodes:
+            node_list.insert(tk.END, f"● {node.name}")
+            # Marquer le nœud actuel
+            if node.id == ref.node_id:
+                node_list.itemconfig(tk.END, foreground="gray")
+
+        def apply_change():
+            selection = node_list.curselection()
+            if not selection:
+                messagebox.showwarning("Attention", "Veuillez sélectionner un nœud.")
+                return
+
+            selected_node = nodes[selection[0]]
+            if selected_node.id == ref.node_id:
+                dialog.destroy()
+                return
+
+            # Mettre à jour la référence
+            ref.node_id = selected_node.id
+            ref.save(self.project.db)
+
+            # Rafraîchir les affichages
+            self.refresh_document_codes()
+            if self.current_source:
+                self.display_source()
+            self.refresh_nodes()
+            if self.selected_node:
+                self.display_node_references()
+
+            self.update_status(f"Reference deplacee vers '{selected_node.name}'")
+            dialog.destroy()
+
+        ttk.Button(main_frame, text="Appliquer", command=apply_change).pack(pady=(15, 0))
+
+    def _delete_reference(self, ref: CodeReference):
+        """Supprime une référence de codage après confirmation."""
+        if not self.project:
+            return
+
+        # Confirmer la suppression
+        node = Node.get(self.project.db, ref.node_id)
+        node_name = node.name if node else "inconnu"
+        content_preview = ref.content[:30] + "..." if len(ref.content) > 30 else ref.content
+
+        if not messagebox.askyesno(
+            "Confirmer la suppression",
+            f"Supprimer la référence '{node_name}' ?\n\nTexte: \"{content_preview}\""
+        ):
+            return
+
+        # Supprimer
+        ref.delete(self.project.db)
+
+        # Rafraîchir les affichages
+        self.refresh_document_codes()
+        if self.current_source:
+            self.display_source()
+        self.refresh_nodes()
+        if self.selected_node:
+            self.display_node_references()
+
+        self.update_status("Référence supprimée")
+
+    def _show_all_nodes_for_coding(self):
+        """Affiche un dialogue pour selectionner un noeud parmi tous."""
+        if not self.project:
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Selectionner un noeud")
+        dialog.geometry("350x400")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(main_frame, text="Choisissez un noeud pour coder la selection:").pack(
+            anchor=tk.W
+        )
+
+        # Liste des noeuds
+        tree_frame = ttk.Frame(main_frame)
+        tree_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
 
         tree = ttk.Treeview(tree_frame, show="tree", selectmode="browse")
         scroll = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=tree.yview)
@@ -1329,7 +1854,7 @@ class MainWindow:
         nodes = Node.get_all(self.project.db)
         for node in nodes:
             tree.tag_configure(node.color, foreground=node.color)
-            tree.insert("", tk.END, iid=node.id, text=f"● {node.name}", tags=(node.color,))
+            tree.insert("", tk.END, iid=node.id, text=f"* {node.name}", tags=(node.color,))
 
         def on_select():
             selection = tree.selection()
@@ -1340,7 +1865,7 @@ class MainWindow:
                     self._code_with_node(node)
             dialog.destroy()
 
-        ttk.Button(dialog, text="Coder", command=on_select).pack(pady=15)
+        ttk.Button(main_frame, text="Coder", command=on_select).pack(pady=(15, 0))
 
         tree.bind("<Double-1>", lambda e: on_select())
 
@@ -1350,20 +1875,23 @@ class MainWindow:
         self.update_status(f"Recherche: {text[:50]}...")
 
     def _rename_node(self):
-        """Renomme le nœud sélectionné."""
+        """Renomme le noeud selectionne."""
         if not self.selected_node:
             return
 
         dialog = tk.Toplevel(self.root)
-        dialog.title("Renommer le nœud")
-        dialog.geometry("350x120")
+        dialog.title("Renommer le noeud")
+        dialog.geometry("350x130")
         dialog.transient(self.root)
         dialog.grab_set()
 
-        ttk.Label(dialog, text="Nouveau nom:").pack(padx=20, pady=(20, 5), anchor=tk.W)
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(main_frame, text="Nouveau nom:").pack(anchor=tk.W)
         name_var = tk.StringVar(value=self.selected_node.name)
-        entry = ttk.Entry(dialog, textvariable=name_var, width=40)
-        entry.pack(padx=20, pady=5)
+        entry = ttk.Entry(main_frame, textvariable=name_var, width=40)
+        entry.pack(pady=5, fill=tk.X)
         entry.focus_set()
         entry.select_range(0, tk.END)
 
@@ -1373,37 +1901,40 @@ class MainWindow:
                 self.selected_node.name = new_name
                 self.selected_node.save(self.project.db)
                 self.refresh_nodes()
-                self.update_status(f"Nœud renommé en '{new_name}'")
+                self.update_status(f"Noeud renomme en '{new_name}'")
             dialog.destroy()
 
         dialog.bind("<Return>", lambda e: save())
         dialog.bind("<Escape>", lambda e: dialog.destroy())
 
-        btn_frame = ttk.Frame(dialog)
-        btn_frame.pack(pady=15)
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(pady=(15, 0))
         ttk.Button(btn_frame, text="Annuler", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Enregistrer", command=save).pack(side=tk.LEFT)
 
     def _change_node_color(self):
-        """Change la couleur du nœud sélectionné."""
+        """Change la couleur du noeud selectionne."""
         if not self.selected_node:
             return
 
         dialog = tk.Toplevel(self.root)
-        dialog.title("Couleur du nœud")
-        dialog.geometry("350x150")
+        dialog.title("Couleur du noeud")
+        dialog.geometry("350x160")
         dialog.transient(self.root)
         dialog.grab_set()
 
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
         ttk.Label(
-            dialog,
+            main_frame,
             text=f"Couleur pour '{self.selected_node.name}':",
-        ).pack(padx=20, pady=(20, 10), anchor=tk.W)
+        ).pack(anchor=tk.W)
 
         color_var = tk.StringVar(value=self.selected_node.color)
 
-        color_frame = ttk.Frame(dialog)
-        color_frame.pack(padx=20, pady=5)
+        color_frame = ttk.Frame(main_frame)
+        color_frame.pack(pady=10)
 
         colors = [
             "#e74c3c", "#e91e63", "#9b59b6", "#673ab7",
@@ -1432,12 +1963,12 @@ class MainWindow:
                 self.selected_node.save(self.project.db)
                 self.refresh_nodes()
                 if self.current_source:
-                    self.display_source()  # Rafraîchir les surlignages
-                self.update_status("Couleur mise à jour")
+                    self.display_source()
+                self.update_status("Couleur mise a jour")
             dialog.destroy()
 
-        btn_frame = ttk.Frame(dialog)
-        btn_frame.pack(pady=15)
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(pady=(10, 0))
         ttk.Button(btn_frame, text="Annuler", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Appliquer", command=save).pack(side=tk.LEFT)
 
@@ -1726,16 +2257,6 @@ class MainWindow:
         except ValueError:
             return "#FFFF99"
 
-    def manage_nodes(self):
-        """Affiche la fenêtre de gestion des nœuds."""
-        # TODO: Implémenter une fenêtre de gestion avancée
-        pass
-
-    def coding_query(self):
-        """Affiche la fenêtre de requête de codage."""
-        # TODO: Implémenter l'interface de requête
-        pass
-
     # --- Actions d'analyse ---
 
     def show_search(self):
@@ -1747,9 +2268,12 @@ class MainWindow:
         dialog.geometry("400x150")
         dialog.transient(self.root)
 
-        ttk.Label(dialog, text="Rechercher:").pack(padx=20, pady=(20, 5), anchor=tk.W)
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(main_frame, text="Rechercher:").pack(anchor=tk.W)
         search_var = tk.StringVar()
-        ttk.Entry(dialog, textvariable=search_var, width=40).pack(padx=20, pady=5)
+        ttk.Entry(main_frame, textvariable=search_var, width=40).pack(pady=5, fill=tk.X)
 
         def search():
             query = search_var.get().strip()
@@ -1768,9 +2292,9 @@ class MainWindow:
                     )
 
                 dialog.destroy()
-                self.update_status(f"{len(results)} résultat(s) trouvé(s)")
+                self.update_status(f"{len(results)} resultat(s) trouve(s)")
 
-        ttk.Button(dialog, text="Rechercher", command=search).pack(pady=20)
+        ttk.Button(main_frame, text="Rechercher", command=search).pack(pady=(15, 0))
 
     def quick_search(self):
         """Recherche rapide."""
@@ -1791,12 +2315,6 @@ class MainWindow:
 
             self.analysis_notebook.select(self.search_frame)
             self.update_status(f"{len(results)} résultat(s)")
-
-    def show_matrix(self):
-        """Affiche une analyse matricielle."""
-        if not self.project:
-            return
-        # TODO: Implémenter l'interface de matrice
 
     def show_wordcloud(self):
         """Génère et affiche un nuage de mots."""
@@ -1905,39 +2423,6 @@ class MainWindow:
 
     # --- Actions diverses ---
 
-    def create_memo(self):
-        """Crée un nouveau mémo."""
-        if not self.project:
-            return
-
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Nouveau mémo")
-        dialog.geometry("500x400")
-        dialog.transient(self.root)
-
-        ttk.Label(dialog, text="Titre:").pack(padx=20, pady=(20, 5), anchor=tk.W)
-        title_var = tk.StringVar()
-        ttk.Entry(dialog, textvariable=title_var, width=50).pack(padx=20, pady=5)
-
-        ttk.Label(dialog, text="Contenu:").pack(padx=20, pady=(10, 5), anchor=tk.W)
-        content_text = tk.Text(dialog, width=50, height=15)
-        content_text.pack(padx=20, pady=5)
-
-        def save():
-            title = title_var.get().strip()
-            content = content_text.get("1.0", tk.END).strip()
-            if title:
-                memo = Memo(
-                    title=title,
-                    content=content,
-                    linked_source_id=self.current_source.id if self.current_source else None,
-                )
-                memo.save(self.project.db)
-                dialog.destroy()
-                self.update_status("Mémo créé")
-
-        ttk.Button(dialog, text="Sauvegarder", command=save).pack(pady=20)
-
     def delete_source(self):
         """Supprime la source sélectionnée."""
         if not self.project or not self.current_source:
@@ -1951,6 +2436,118 @@ class MainWindow:
             self.current_source = None
             self.refresh_sources()
             self.clear_content()
+
+    # ===== Menu contextuel des sources =====
+
+    def _show_source_context_menu(self, event):
+        """Affiche le menu contextuel pour les sources."""
+        # Sélectionner l'item sous le curseur
+        item = self.sources_tree.identify_row(event.y)
+        if item:
+            self.sources_tree.selection_set(item)
+            # Mettre à jour current_source
+            source_id = item
+            self.current_source = Source.get(self.project.db, source_id)
+
+        self.source_context_menu.delete(0, tk.END)
+
+        if self.current_source:
+            # Ouvrir
+            self.source_context_menu.add_command(
+                label="📄 Ouvrir",
+                command=lambda: self.display_source()
+            )
+
+            # Export transcription pour audio/vidéo
+            if self.current_source.type in (SourceType.AUDIO, SourceType.VIDEO):
+                self.source_context_menu.add_separator()
+                self.source_context_menu.add_command(
+                    label="📝 Exporter la transcription (.txt)",
+                    command=lambda: self._export_transcription("txt")
+                )
+                self.source_context_menu.add_command(
+                    label="📄 Exporter la transcription (.docx)",
+                    command=lambda: self._export_transcription("docx")
+                )
+
+            self.source_context_menu.add_separator()
+            self.source_context_menu.add_command(
+                label="🗑️ Supprimer",
+                command=self.delete_source
+            )
+
+        self.source_context_menu.tk_popup(event.x_root, event.y_root)
+
+    def _export_transcription(self, format: str):
+        """Exporte la transcription d'une source audio/vidéo."""
+        if not self.current_source:
+            return
+
+        if not self.current_source.content:
+            messagebox.showwarning(
+                "Aucune transcription",
+                "Cette source n'a pas de transcription à exporter."
+            )
+            return
+
+        # Nom par défaut
+        default_name = Path(self.current_source.name).stem + "_transcription"
+
+        if format == "txt":
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".txt",
+                initialfile=default_name + ".txt",
+                filetypes=[("Fichiers texte", "*.txt"), ("Tous les fichiers", "*.*")]
+            )
+            if file_path:
+                Path(file_path).write_text(self.current_source.content, encoding="utf-8")
+                self.update_status(f"Transcription exportée: {file_path}")
+
+        elif format == "docx":
+            try:
+                from docx import Document
+                from docx.shared import Pt
+            except ImportError:
+                messagebox.showerror(
+                    "Module manquant",
+                    "python-docx n'est pas installé.\n"
+                    "Installez-le avec: pip install python-docx"
+                )
+                return
+
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".docx",
+                initialfile=default_name + ".docx",
+                filetypes=[("Document Word", "*.docx"), ("Tous les fichiers", "*.*")]
+            )
+            if file_path:
+                doc = Document()
+                doc.add_heading(f"Transcription: {self.current_source.name}", level=1)
+
+                # Ajouter les métadonnées si disponibles
+                metadata = self.current_source.metadata or {}
+                if "duration" in metadata:
+                    duration = metadata["duration"]
+                    minutes = int(duration // 60)
+                    seconds = int(duration % 60)
+                    doc.add_paragraph(f"Durée: {minutes}:{seconds:02d}")
+
+                transcription_meta = metadata.get("transcription", {})
+                if transcription_meta.get("model"):
+                    doc.add_paragraph(f"Modèle Whisper: {transcription_meta['model']}")
+                if transcription_meta.get("language_detected"):
+                    doc.add_paragraph(f"Langue détectée: {transcription_meta['language_detected']}")
+
+                doc.add_paragraph("")  # Ligne vide
+
+                # Contenu
+                for paragraph_text in self.current_source.content.split("\n\n"):
+                    if paragraph_text.strip():
+                        p = doc.add_paragraph(paragraph_text.strip())
+                        p.style.font.size = Pt(11)
+
+                doc.save(file_path)
+                self.update_status(f"Transcription exportée: {file_path}")
 
     def show_about(self):
         """Affiche la fenêtre À propos."""
@@ -1967,17 +2564,21 @@ class MainWindow:
         """Affiche le guide d'utilisation."""
         dialog = tk.Toplevel(self.root)
         dialog.title("Guide d'utilisation - Lele")
-        dialog.geometry("700x600")
+        dialog.geometry("450x650")
         dialog.transient(self.root)
 
-        # Frame principale avec scrollbar
-        main_frame = ttk.Frame(dialog)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # Frame principale avec scrollbar et padding
+        main_frame = ttk.Frame(dialog, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Obtenir la couleur de fond du style ttk (coherent avec les autres dialogues)
+        style = ttk.Style()
+        bg_color = style.lookup("TFrame", "background") or "#f0f0f0"
 
         # Canvas et scrollbar
-        canvas = tk.Canvas(main_frame)
+        canvas = tk.Canvas(main_frame, highlightthickness=0, bg=bg_color)
         scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
+        scrollable_frame = tk.Frame(canvas, bg=bg_color)
 
         scrollable_frame.bind(
             "<Configure>",
@@ -1989,82 +2590,85 @@ class MainWindow:
 
         # Contenu de l'aide
         help_sections = [
-            ("🚀 Démarrage rapide", [
-                "1. Créez un projet: Fichier > Nouveau projet (Ctrl+N)",
-                "2. Importez des fichiers: glissez-déposez ou Fichier > Importer",
-                "3. Créez des nœuds (codes) dans le panneau Nœuds",
-                "4. Sélectionnez du texte et codez-le avec Ctrl+K",
+            ("Demarrage rapide", [
+                "1. Creez un projet: Fichier > Nouveau projet (Ctrl+N)",
+                "2. Importez des fichiers: glissez-deposez ou Fichier > Importer",
+                "3. Creez des noeuds (codes) dans le panneau Noeuds",
+                "4. Selectionnez du texte et codez-le avec Ctrl+K",
             ]),
-            ("📁 Gestion des projets", [
-                "• Nouveau projet: Fichier > Nouveau projet",
-                "• Ouvrir: Fichier > Ouvrir projet",
-                "• Sauvegarder: Fichier > Sauvegarder (Ctrl+S)",
-                "• Projets récents accessibles via Fichier > Projets récents",
+            ("Gestion des projets", [
+                "- Nouveau projet: Fichier > Nouveau projet",
+                "- Ouvrir: Fichier > Ouvrir projet",
+                "- Sauvegarder: Fichier > Sauvegarder (Ctrl+S)",
+                "- Projets recents accessibles via Fichier > Projets recents",
             ]),
-            ("📥 Import de données", [
-                "Formats supportés:",
-                "• Documents: TXT, PDF, Word (.docx), RTF",
-                "• Média: Audio (MP3, WAV, FLAC), Vidéo (MP4, AVI, MOV)",
-                "• Images: JPG, PNG, GIF, BMP, TIFF",
-                "• Tableurs: Excel (.xlsx), CSV",
-                "• Bibliographie: RIS, BibTeX",
+            ("Import de donnees", [
+                "Formats supportes:",
+                "- Documents: TXT, PDF, Word (.docx), RTF",
+                "- Media: Audio (MP3, WAV, FLAC), Video (MP4, AVI, MOV)",
+                "- Images: JPG, PNG, GIF, BMP, TIFF",
+                "- Tableurs: Excel (.xlsx), CSV",
+                "- Bibliographie: RIS, BibTeX",
                 "",
-                "Pour l'audio/vidéo, la transcription automatique est disponible",
+                "Pour l'audio/video, la transcription automatique est disponible",
                 "via le moteur Whisper (OpenAI).",
             ]),
-            ("🏷️ Codage", [
-                "Méthode classique:",
+            ("Codage", [
+                "Methode classique:",
                 "1. Ouvrez une source (double-clic)",
-                "2. Sélectionnez un nœud dans le panneau Nœuds",
-                "3. Surlignez le texte à coder",
+                "2. Selectionnez un noeud dans le panneau Noeuds",
+                "3. Surlignez le texte a coder",
                 "4. Appuyez sur Ctrl+K",
                 "",
-                "Méthode rapide:",
-                "• Surlignez du texte → clic droit → \"Coder avec\"",
-                "• Ou double-cliquez sur un nœud avec du texte sélectionné",
+                "Methode rapide:",
+                "- Surlignez du texte > clic droit > \"Coder avec\"",
+                "- Ou double-cliquez sur un noeud avec du texte selectionne",
                 "",
-                "Créer et coder en même temps:",
-                "• Surlignez du texte → Ctrl+Shift+K",
+                "Creer et coder en meme temps:",
+                "- Surlignez du texte > Ctrl+Shift+K",
             ]),
-            ("🔮 Détection automatique de thèmes", [
-                "1. Cliquez sur \"🔮 Auto\" dans le panneau Nœuds",
-                "2. Sélectionnez les sources à analyser",
-                "3. Configurez les paramètres (granularité, nb max de thèmes)",
-                "4. Validez les thèmes proposés avant création",
+            ("Detection automatique de themes", [
+                "1. Cliquez sur \"Auto\" dans le panneau Noeuds",
+                "2. Selectionnez les sources a analyser",
+                "3. Configurez les parametres (granularite, nb max de themes)",
+                "4. Validez les themes proposes avant creation",
                 "",
                 "Pour un meilleur nommage, configurez Ollama dans",
-                "Paramètres > IA / LLM local.",
+                "Parametres > IA / LLM local.",
             ]),
-            ("📊 Visualisations", [
+            ("Visualisations", [
                 "Menu Analyse propose:",
-                "• Nuage de mots: fréquence des termes",
-                "• Carte mentale: hiérarchie des nœuds",
-                "• Sociogramme: co-occurrences entre nœuds",
-                "• Matrice: croisement nœuds × sources",
+                "- Nuage de mots: frequence des termes",
+                "- Carte mentale: hierarchie des noeuds",
+                "- Sociogramme: co-occurrences entre noeuds",
+                "- Matrice: croisement noeuds x sources",
             ]),
-            ("💡 Conseils", [
-                "• Utilisez les couleurs pour distinguer les thèmes",
-                "• Créez une hiérarchie de nœuds (sous-nœuds)",
-                "• Documentez vos décisions dans les mémos",
-                "• Sauvegardez régulièrement votre projet",
+            ("Conseils", [
+                "- Utilisez les couleurs pour distinguer les themes",
+                "- Creez une hierarchie de noeuds (sous-noeuds)",
+                "- Exportez vos transcriptions en .docx pour les partager",
+                "- Sauvegardez regulierement votre projet",
             ]),
         ]
 
         for title, lines in help_sections:
             # Titre de section
-            title_label = ttk.Label(
+            title_label = tk.Label(
                 scrollable_frame,
                 text=title,
                 font=("", 12, "bold"),
+                bg=bg_color,
             )
             title_label.pack(anchor=tk.W, pady=(15, 5), padx=10)
 
             # Contenu
             for line in lines:
-                line_label = ttk.Label(
+                line_label = tk.Label(
                     scrollable_frame,
                     text=line,
-                    wraplength=650,
+                    wraplength=500,
+                    justify=tk.LEFT,
+                    bg=bg_color,
                 )
                 line_label.pack(anchor=tk.W, padx=20)
 
@@ -2114,16 +2718,20 @@ class MainWindow:
         dialog.geometry("500x500")
         dialog.transient(self.root)
 
+        # Frame principale avec padding
+        outer_frame = ttk.Frame(dialog, padding="20")
+        outer_frame.pack(fill=tk.BOTH, expand=True)
+
         # Titre
         ttk.Label(
-            dialog,
+            outer_frame,
             text="⌨️ Raccourcis clavier",
             font=("", 14, "bold"),
-        ).pack(pady=(20, 10))
+        ).pack(pady=(0, 10))
 
         # Frame avec scrollbar
-        main_frame = ttk.Frame(dialog)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        main_frame = ttk.Frame(outer_frame)
+        main_frame.pack(fill=tk.BOTH, expand=True)
 
         # Treeview pour les raccourcis
         tree = ttk.Treeview(
@@ -2183,7 +2791,7 @@ class MainWindow:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Bouton fermer
-        ttk.Button(dialog, text="Fermer", command=dialog.destroy).pack(pady=15)
+        ttk.Button(outer_frame, text="Fermer", command=dialog.destroy).pack(pady=(15, 0))
 
     def show_transcription_settings(self):
         """Affiche les paramètres de transcription."""
@@ -2341,15 +2949,14 @@ class MainWindow:
             self.selected_node = Node.get(self.project.db, node_id)
             self.display_node_references()
 
-    def on_node_double_click(self, event):
-        """Gère le double-clic sur un nœud."""
-        # Ouvrir l'éditeur de nœud
-        pass
-
     def display_source(self):
         """Affiche le contenu d'une source."""
         if not self.current_source:
             return
+
+        # Réinitialiser le mode édition si on change de source
+        if self.edit_mode:
+            self._set_edit_mode(False)
 
         self.content_text.configure(state=tk.NORMAL)
         self.content_text.delete("1.0", tk.END)
@@ -2366,6 +2973,12 @@ class MainWindow:
                         start = f"1.0+{ref.start_pos}c"
                         end = f"1.0+{ref.end_pos}c"
                         self.highlight_coding(start, end, node.color)
+
+        # Mettre en mode lecture seule par défaut
+        self.content_text.configure(
+            state=tk.DISABLED,
+            background="#f8f8f8",
+        )
 
         self.refresh_document_codes()
         self.update_line_numbers()
@@ -2405,6 +3018,7 @@ class MainWindow:
                 "",
                 tk.END,
                 values=(ref.source_name, line_num, content),
+                tags=(ref.id,),
             )
 
         self.analysis_notebook.select(self.refs_frame)

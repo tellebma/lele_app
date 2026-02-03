@@ -1,5 +1,6 @@
 """Dialogue de configuration pour la détection automatique de nœuds."""
 
+import threading
 import tkinter as tk
 from tkinter import ttk
 from typing import Callable, Optional
@@ -105,22 +106,31 @@ class AutoCodingConfigDialog(tk.Toplevel):
 
     def _setup_ui(self):
         """Configure l'interface utilisateur."""
+        # Obtenir la couleur de fond du style ttk (coherent avec les autres dialogues)
+        style = ttk.Style()
+        bg_color = style.lookup("TFrame", "background") or "#f0f0f0"
+
         # Frame principal avec scrollbar
-        self._canvas = tk.Canvas(self, highlightthickness=0)
+        self._canvas = tk.Canvas(self, highlightthickness=0, bg=bg_color)
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=self._canvas.yview)
-        self.main_frame = ttk.Frame(self._canvas, padding="20")
+        self.main_frame = tk.Frame(self._canvas, bg=bg_color, padx=20, pady=20)
 
         self.main_frame.bind(
             "<Configure>",
             lambda e: self._canvas.configure(scrollregion=self._canvas.bbox("all"))
         )
 
-        self._canvas.create_window((0, 0), window=self.main_frame, anchor="nw")
+        self._window_id = self._canvas.create_window((0, 0), window=self.main_frame, anchor="nw")
         self._canvas.configure(yscrollcommand=scrollbar.set)
 
         # Pack canvas et scrollbar
         self._canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
+
+        # Etendre le main_frame sur toute la largeur du canvas
+        def _on_canvas_configure(event):
+            self._canvas.itemconfig(self._window_id, width=event.width)
+        self._canvas.bind("<Configure>", _on_canvas_configure)
 
         # Binding molette souris - avec vérification que le widget existe encore
         self._mousewheel_bound = False
@@ -450,9 +460,30 @@ class AutoCodingConfigDialog(tk.Toplevel):
         self.analyze_btn.pack(side=tk.RIGHT)
 
     def _check_dependencies(self):
-        """Vérifie les dépendances et met à jour l'UI."""
+        """Vérifie les dépendances de manière asynchrone."""
+        # Afficher un message de chargement
+        self.deps_label.configure(text="Vérification en cours...")
+        self.ollama_status.configure(text="Vérification d'Ollama...", foreground="#666666")
+
+        # Lancer la vérification dans un thread séparé
+        thread = threading.Thread(target=self._check_dependencies_async, daemon=True)
+        thread.start()
+
+    def _check_dependencies_async(self):
+        """Thread de vérification des dépendances."""
         try:
             deps = check_dependencies()
+            # Mettre à jour l'UI depuis le thread principal
+            self.after(0, lambda: self._update_dependencies_ui(deps))
+        except Exception as e:
+            self.after(0, lambda: self._show_dependency_error(str(e)))
+
+    def _update_dependencies_ui(self, deps: dict):
+        """Met à jour l'UI avec les résultats de vérification."""
+        try:
+            # Vérifier que le widget existe encore
+            if not self.winfo_exists():
+                return
 
             lines = []
             all_ok = True
@@ -488,6 +519,7 @@ class AutoCodingConfigDialog(tk.Toplevel):
                 self.ollama_status.configure(
                     text=f"✅ {ol['message']}", foreground="#228B22"
                 )
+                # Rafraîchir les modèles Ollama de manière asynchrone
                 self._refresh_ollama_models()
             else:
                 self.ollama_status.configure(
@@ -500,25 +532,51 @@ class AutoCodingConfigDialog(tk.Toplevel):
             if not all_ok:
                 self.analyze_btn.configure(state=tk.DISABLED)
 
-        except Exception as e:
+        except tk.TclError:
+            # Le widget a été détruit entre-temps
+            pass
+
+    def _show_dependency_error(self, error: str):
+        """Affiche une erreur de vérification des dépendances."""
+        try:
+            if not self.winfo_exists():
+                return
             self.deps_label.configure(
-                text=f"❌ Erreur: {e}",
+                text=f"❌ Erreur: {error}",
                 foreground="#CC0000",
             )
             self.analyze_btn.configure(state=tk.DISABLED)
+        except tk.TclError:
+            pass
 
     def _refresh_ollama_models(self):
-        """Rafraîchit la liste des modèles Ollama."""
+        """Rafraîchit la liste des modèles Ollama de manière asynchrone."""
+        # Lancer la récupération dans un thread séparé
+        thread = threading.Thread(target=self._refresh_ollama_models_async, daemon=True)
+        thread.start()
+
+    def _refresh_ollama_models_async(self):
+        """Thread de récupération des modèles Ollama."""
         try:
             models = get_ollama_models()
+            self.after(0, lambda: self._update_ollama_models_ui(models))
+        except Exception:
+            self.after(0, lambda: self._update_ollama_models_ui(None))
+
+    def _update_ollama_models_ui(self, models: list | None):
+        """Met à jour l'UI avec la liste des modèles Ollama."""
+        try:
+            if not self.winfo_exists():
+                return
+
             if models:
                 self.ollama_combo["values"] = models
                 if self.llm_model_var.get() not in models:
                     self.llm_model_var.set(models[0])
             else:
                 self.ollama_combo["values"] = ["mistral", "llama2", "phi"]
-        except Exception:
-            self.ollama_combo["values"] = ["mistral", "llama2", "phi"]
+        except tk.TclError:
+            pass
 
     def _on_provider_change(self):
         """Gère le changement de provider LLM."""

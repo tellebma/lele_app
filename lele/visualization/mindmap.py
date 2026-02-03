@@ -87,56 +87,67 @@ class MindMapGenerator:
     def _calculate_positions(
         self, nodes: list[Node], width: int, height: int
     ) -> dict[str, tuple[float, float]]:
-        """Calcule les positions des nœuds."""
+        """Calcule les positions des nœuds en disposition radiale."""
         positions = {}
+        center_x = width / 2
+        center_y = height / 2
 
-        def place_node(node, center_x, center_y, angle_start, angle_range, radius, level):
-            positions[node.id] = (center_x, center_y)
+        # Compter le nombre total de nœuds pour adapter l'espacement
+        def count_nodes(node_list):
+            total = len(node_list)
+            for n in node_list:
+                total += count_nodes(n.children)
+            return total
+
+        total_nodes = count_nodes(nodes)
+
+        # Adapter le rayon de base selon le nombre de nœuds
+        base_radius = min(width, height) * 0.38
+        if total_nodes > 20:
+            base_radius = min(width, height) * 0.42
+
+        def place_node_recursive(node, angle, radius, level, parent_angle=None):
+            """Place un nœud et ses enfants de manière radiale."""
+            x = center_x + radius * math.cos(math.radians(angle))
+            y = center_y + radius * math.sin(math.radians(angle))
+            positions[node.id] = (x, y)
 
             if node.children:
                 n_children = len(node.children)
-                angle_step = angle_range / max(n_children, 1)
-                child_radius = radius * 0.7
+                # Les enfants s'étalent autour du parent
+                # Plus de nœuds = plus d'angle nécessaire
+                spread_angle = min(60, 30 + n_children * 8)
+                child_radius = radius + 80 + level * 20  # Vers l'extérieur
+
+                # Limiter le rayon max
+                max_radius = min(width, height) * 0.45
+                child_radius = min(child_radius, max_radius)
 
                 for i, child in enumerate(node.children):
-                    angle = angle_start + (i + 0.5) * angle_step
-                    child_x = center_x + child_radius * math.cos(math.radians(angle))
-                    child_y = center_y + child_radius * math.sin(math.radians(angle))
+                    # Distribuer les enfants autour de l'angle du parent
+                    if n_children == 1:
+                        child_angle = angle
+                    else:
+                        offset = (i - (n_children - 1) / 2) * (spread_angle / max(n_children - 1, 1))
+                        child_angle = angle + offset
 
-                    place_node(
-                        child,
-                        child_x,
-                        child_y,
-                        angle - angle_step / 2,
-                        angle_step,
-                        child_radius,
-                        level + 1,
-                    )
+                    place_node_recursive(child, child_angle, child_radius, level + 1, angle)
 
-        # Placer les nœuds racines
-        center_x = width / 2
-        center_y = height / 2
         n_roots = len(nodes)
-        angle_per_root = 360 / max(n_roots, 1)
-        radius = min(width, height) * 0.35
 
-        for i, node in enumerate(nodes):
-            if n_roots == 1:
-                # Un seul nœud racine au centre
-                place_node(node, center_x, center_y, 0, 360, radius, 0)
-            else:
-                angle = i * angle_per_root
-                node_x = center_x + radius * 0.3 * math.cos(math.radians(angle))
-                node_y = center_y + radius * 0.3 * math.sin(math.radians(angle))
-                place_node(
-                    node,
-                    node_x,
-                    node_y,
-                    angle - angle_per_root / 2,
-                    angle_per_root,
-                    radius,
-                    0,
-                )
+        if n_roots == 1:
+            # Un seul nœud racine au centre
+            positions[nodes[0].id] = (center_x, center_y)
+            if nodes[0].children:
+                n_children = len(nodes[0].children)
+                for i, child in enumerate(nodes[0].children):
+                    angle = (360 / n_children) * i - 90  # Commencer en haut
+                    place_node_recursive(child, angle, base_radius * 0.5, 1)
+        else:
+            # Plusieurs nœuds racines : les disposer en cercle
+            for i, node in enumerate(nodes):
+                angle = (360 / n_roots) * i - 90  # Commencer en haut
+                place_node_recursive(node, angle, base_radius, 0)
 
         return positions
 
@@ -175,9 +186,9 @@ class MindMapGenerator:
 
             pos = positions[node.id]
 
-            # Taille du nœud basée sur le niveau
-            size = 80 - level * 10
-            size = max(size, 40)
+            # Taille du nœud basée sur le niveau (plus petit pour éviter chevauchement)
+            size = 50 - level * 5
+            size = max(size, 30)
 
             # Dessiner le cercle
             circle = mpatches.Circle(
@@ -190,20 +201,31 @@ class MindMapGenerator:
             )
             ax.add_patch(circle)
 
-            # Texte du nœud
+            # Texte du nœud (à côté du cercle pour meilleure lisibilité)
             label = node.name
-            if len(label) > 15:
-                label = label[:12] + "..."
+            if len(label) > 20:
+                label = label[:17] + "..."
+
+            # Placer le texte à côté du cercle selon sa position
+            text_offset = size / 2 + 5
+            if pos[0] < ax.get_xlim()[1] / 2:
+                # Nœud à gauche : texte à gauche
+                text_x = pos[0] - text_offset
+                ha = "right"
+            else:
+                # Nœud à droite : texte à droite
+                text_x = pos[0] + text_offset
+                ha = "left"
 
             ax.text(
-                pos[0],
+                text_x,
                 pos[1],
                 label,
-                ha="center",
+                ha=ha,
                 va="center",
-                fontsize=max(8, 12 - level),
+                fontsize=max(7, 10 - level),
                 fontweight="bold",
-                color="white",
+                color="#333333",
                 zorder=3,
             )
 

@@ -54,6 +54,13 @@ hidden_imports = [
     'openpyxl',
     'mutagen',
     'psutil',
+    # Auto-codage
+    'sentence_transformers',
+    'umap',
+    'hdbscan',
+    'sklearn',
+    'sklearn.neighbors',
+    'sklearn.cluster',
 ]
 
 # Ajouter les submodules torch si CUDA

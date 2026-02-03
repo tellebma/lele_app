@@ -16,6 +16,14 @@ except ImportError:
 
 from transcribe import transcribe_audio
 
+# Import optionnel pour l'export DOCX
+try:
+    from docx import Document
+    from docx.shared import Pt
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
+
 
 class SettingsDialog(tk.Toplevel):
     """Fenêtre de paramètres."""
@@ -446,21 +454,56 @@ class TranscriptionApp:
         self.status_label.configure(text="Copié dans le presse-papier !")
 
     def save_result(self):
-        """Sauvegarde le résultat dans un fichier."""
+        """Sauvegarde le résultat dans un fichier (.txt ou .docx)."""
         if not self.current_file:
             return
 
-        default_name = self.current_file.stem + "_transcription.txt"
+        default_name = self.current_file.stem + "_transcription"
+
+        # Construire la liste des types de fichiers
+        filetypes = [("Fichiers texte", "*.txt")]
+        if DOCX_AVAILABLE:
+            filetypes.insert(0, ("Document Word", "*.docx"))
+        filetypes.append(("Tous les fichiers", "*.*"))
+
         file_path = filedialog.asksaveasfilename(
-            defaultextension=".txt",
+            defaultextension=".docx" if DOCX_AVAILABLE else ".txt",
             initialfile=default_name,
-            filetypes=[("Fichiers texte", "*.txt"), ("Tous les fichiers", "*.*")]
+            filetypes=filetypes
         )
 
         if file_path:
             content = self.result_text.get(1.0, tk.END).strip()
-            Path(file_path).write_text(content, encoding="utf-8")
+            path = Path(file_path)
+
+            if path.suffix.lower() == ".docx":
+                if not DOCX_AVAILABLE:
+                    messagebox.showerror(
+                        "Erreur",
+                        "python-docx n'est pas installé.\n"
+                        "Installez-le avec: pip install python-docx"
+                    )
+                    return
+                self._save_as_docx(path, content)
+            else:
+                path.write_text(content, encoding="utf-8")
+
             self.status_label.configure(text=f"Sauvegardé: {file_path}")
+
+    def _save_as_docx(self, path: Path, content: str):
+        """Exporte la transcription en document Word."""
+        doc = Document()
+
+        # Titre du document
+        title = doc.add_heading(f"Transcription: {self.current_file.name}", level=1)
+
+        # Ajouter le contenu
+        for paragraph_text in content.split("\n\n"):
+            if paragraph_text.strip():
+                p = doc.add_paragraph(paragraph_text.strip())
+                p.style.font.size = Pt(11)
+
+        doc.save(str(path))
 
     def run(self):
         """Lance l'application."""
