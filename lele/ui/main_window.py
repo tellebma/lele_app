@@ -13,7 +13,7 @@ try:
 except ImportError:
     DND_AVAILABLE = False
 
-from .. import get_logger
+from .. import get_logger, __version__
 from ..models.project import Project
 from ..models.source import Source, SourceType
 from ..models.node import Node
@@ -2553,8 +2553,8 @@ class MainWindow:
         """Affiche la fenêtre À propos."""
         messagebox.showinfo(
             "À propos",
-            "Lele - Analyse Qualitative de Données\n\n"
-            "Version 0.1.0\n\n"
+            f"Lele - Analyse Qualitative de Données\n\n"
+            f"Version {__version__}\n\n"
             "Application d'analyse qualitative inspirée de NVivo.\n"
             "Supporte l'import de multiples formats, le codage,\n"
             "et diverses visualisations.",

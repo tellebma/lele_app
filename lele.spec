@@ -35,11 +35,13 @@ whisper_datas = collect_data_files('whisper')
 # Collecter les données imageio-ffmpeg (binaires FFmpeg)
 ffmpeg_datas = collect_data_files('imageio_ffmpeg')
 
+# Collecter tous les submodules torch (résout les erreurs d'import circulaire)
+torch_imports = collect_submodules('torch')
+torchaudio_imports = collect_submodules('torchaudio')
+
 # Modules cachés nécessaires
 hidden_imports = [
     'whisper',
-    'torch',
-    'torchaudio',
     'numpy',
     'tiktoken',
     'tiktoken_ext',
@@ -61,14 +63,10 @@ hidden_imports = [
     'sklearn',
     'sklearn.neighbors',
     'sklearn.cluster',
+    # Torch submodules critiques
+    *torch_imports,
+    *torchaudio_imports,
 ]
-
-# Ajouter les submodules torch si CUDA
-if has_cuda:
-    hidden_imports.extend([
-        'torch.cuda',
-        'torch.backends.cudnn',
-    ])
 
 a = Analysis(
     ['main.py'],

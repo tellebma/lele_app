@@ -107,6 +107,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Update version in source
+        run: |
+          $version = "${{ needs.version.outputs.version }}".TrimStart("v")
+          (Get-Content lele/__init__.py) -replace '__version__ = ".*"', "__version__ = `"$version`"" | Set-Content lele/__init__.py
+          Write-Host "Updated version to $version"
+        shell: pwsh
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -143,6 +150,13 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Update version in source
+        run: |
+          $version = "${{ needs.version.outputs.version }}".TrimStart("v")
+          (Get-Content lele/__init__.py) -replace '__version__ = ".*"', "__version__ = `"$version`"" | Set-Content lele/__init__.py
+          Write-Host "Updated version to $version"
+        shell: pwsh
 
       - name: Set up Python
         uses: actions/setup-python@v5

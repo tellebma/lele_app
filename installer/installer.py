@@ -139,26 +139,53 @@ def extract_zip(zip_path: Path, dest_dir: Path, progress_callback=None) -> bool:
         return False
 
 
-def create_shortcut(target: Path, shortcut_path: Path, description: str = ""):
-    """Crée un raccourci Windows."""
+def get_shell_folder(folder_name: str) -> Path | None:
+    """Récupère un dossier spécial Windows (Desktop, StartMenu, etc.)."""
     try:
         import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
+        ) as key:
+            value, _ = winreg.QueryValueEx(key, folder_name)
+            return Path(value)
+    except Exception:
+        return None
+
+
+def create_shortcut(target: Path, shortcut_path: Path, description: str = "") -> bool:
+    """Crée un raccourci Windows."""
+    try:
+        # S'assurer que le dossier parent existe
+        shortcut_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Utiliser PowerShell pour créer le raccourci
+        # Échapper les guillemets dans les chemins
+        target_str = str(target).replace("'", "''")
+        shortcut_str = str(shortcut_path).replace("'", "''")
+        workdir_str = str(target.parent).replace("'", "''")
+        desc_str = description.replace("'", "''")
+
         ps_script = f'''
 $WshShell = New-Object -ComObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut("{shortcut_path}")
-$Shortcut.TargetPath = "{target}"
-$Shortcut.WorkingDirectory = "{target.parent}"
-$Shortcut.Description = "{description}"
+$Shortcut = $WshShell.CreateShortcut('{shortcut_str}')
+$Shortcut.TargetPath = '{target_str}'
+$Shortcut.WorkingDirectory = '{workdir_str}'
+$Shortcut.Description = '{desc_str}'
 $Shortcut.Save()
 '''
-        subprocess.run(
-            ["powershell", "-Command", ps_script],
+        result = subprocess.run(
+            ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
             capture_output=True,
+            text=True,
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )
-        return True
+
+        if result.returncode != 0:
+            print(f"PowerShell error: {result.stderr}")
+            return False
+
+        return shortcut_path.exists()
 
     except Exception as e:
         print(f"Erreur création raccourci: {e}")
@@ -440,22 +467,42 @@ class InstallerApp:
 
             exe_path = install_dir / "Lele" / "Lele.exe"
 
+            shortcuts_created = []
+            shortcuts_failed = []
+
             if self.create_desktop_shortcut.get():
-                desktop = Path(os.environ.get("USERPROFILE", "")) / "Desktop"
-                create_shortcut(
+                # Utiliser le registre pour obtenir le vrai chemin du Bureau
+                desktop = get_shell_folder("Desktop")
+                if not desktop:
+                    desktop = Path(os.environ.get("USERPROFILE", "")) / "Desktop"
+
+                if create_shortcut(
                     exe_path,
                     desktop / f"{APP_NAME}.lnk",
                     "Lele - Analyse Qualitative de Données"
-                )
+                ):
+                    shortcuts_created.append("Bureau")
+                else:
+                    shortcuts_failed.append("Bureau")
 
             if self.create_start_menu.get():
-                start_menu = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Start Menu" / "Programs"
-                start_menu.mkdir(parents=True, exist_ok=True)
-                create_shortcut(
+                # Utiliser le registre pour obtenir le vrai chemin du Menu Démarrer
+                start_menu = get_shell_folder("Programs")
+                if not start_menu:
+                    start_menu = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Start Menu" / "Programs"
+
+                if create_shortcut(
                     exe_path,
                     start_menu / f"{APP_NAME}.lnk",
                     "Lele - Analyse Qualitative de Données"
-                )
+                ):
+                    shortcuts_created.append("Menu Démarrer")
+                else:
+                    shortcuts_failed.append("Menu Démarrer")
+
+            # Stocker les résultats pour l'affichage final
+            self.shortcuts_created = shortcuts_created
+            self.shortcuts_failed = shortcuts_failed
 
             # Terminé
             self.root.after(0, lambda: self.installation_complete(install_dir, variant))
@@ -475,12 +522,18 @@ class InstallerApp:
 
         variant_text = "GPU (CUDA)" if variant == "cuda" else "CPU"
 
-        result = messagebox.askyesno(
-            "Installation terminée",
-            f"{APP_NAME} (version {variant_text}) a été installé avec succès!\n\n"
-            f"Dossier: {install_dir}\n\n"
-            "Voulez-vous lancer l'application maintenant?"
-        )
+        # Construire le message avec les infos sur les raccourcis
+        message = f"{APP_NAME} (version {variant_text}) a été installé avec succès!\n\n"
+        message += f"Dossier: {install_dir}\n\n"
+
+        if hasattr(self, 'shortcuts_created') and self.shortcuts_created:
+            message += f"✅ Raccourcis créés: {', '.join(self.shortcuts_created)}\n"
+        if hasattr(self, 'shortcuts_failed') and self.shortcuts_failed:
+            message += f"⚠️ Raccourcis échoués: {', '.join(self.shortcuts_failed)}\n"
+
+        message += "\nVoulez-vous lancer l'application maintenant?"
+
+        result = messagebox.askyesno("Installation terminée", message)
 
         if result:
             exe_path = install_dir / "Lele" / "Lele.exe"
