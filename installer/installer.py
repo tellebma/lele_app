@@ -171,13 +171,14 @@ class InstallerApp:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title(f"Installation de {APP_NAME}")
-        self.root.geometry("550x450")
-        self.root.resizable(False, False)
+        self.root.geometry("550x580")
+        self.root.minsize(550, 580)
+        self.root.resizable(True, True)
 
         # Centrer la fenêtre
         self.root.update_idletasks()
         x = (self.root.winfo_screenwidth() - 550) // 2
-        y = (self.root.winfo_screenheight() - 450) // 2
+        y = (self.root.winfo_screenheight() - 580) // 2
         self.root.geometry(f"+{x}+{y}")
 
         # Variables
