@@ -145,11 +145,13 @@ class SettingsManager:
         projects = []
         for path_str in self._settings.recent_projects:
             path = Path(path_str)
-            projects.append({
-                "path": path_str,
-                "name": path.name,
-                "exists": path.exists(),
-            })
+            projects.append(
+                {
+                    "path": path_str,
+                    "name": path.name,
+                    "exists": path.exists(),
+                }
+            )
         return projects
 
     def clear_recent_projects(self):

@@ -10,6 +10,7 @@ from typing import Optional
 try:
     import matplotlib.pyplot as plt
     import matplotlib.patches as mpatches
+
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
@@ -164,9 +165,7 @@ class MindMapGenerator:
         for node in nodes:
             draw_recursive(node)
 
-    def _draw_nodes(
-        self, ax, nodes: list[Node], positions: dict, show_references: bool
-    ):
+    def _draw_nodes(self, ax, nodes: list[Node], positions: dict, show_references: bool):
         """Dessine les nœuds."""
 
         def draw_recursive(node, level=0):

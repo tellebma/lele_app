@@ -272,7 +272,9 @@ class BibliographyImporter(BaseImporter):
             field_value = re.sub(r"\s+", " ", field_value)  # Normaliser les espaces
             field_value = field_value.replace("\\&", "&")
             field_value = field_value.replace("~", " ")
-            field_value = re.sub(r"\\[a-zA-Z]+\{([^}]*)\}", r"\1", field_value)  # Enlever les commandes LaTeX simples
+            field_value = re.sub(
+                r"\\[a-zA-Z]+\{([^}]*)\}", r"\1", field_value
+            )  # Enlever les commandes LaTeX simples
 
             # Traiter selon le type de champ
             if field_name == "author":

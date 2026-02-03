@@ -9,6 +9,7 @@ import traceback
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
+
     DND_AVAILABLE = True
 except ImportError:
     DND_AVAILABLE = False
@@ -111,9 +112,7 @@ class MainWindow:
         file_menu.add_cascade(label="Projets récents", menu=self.recent_menu)
         self._update_recent_projects_menu()
 
-        file_menu.add_command(
-            label="Sauvegarder", command=self.save_project, accelerator="Ctrl+S"
-        )
+        file_menu.add_command(label="Sauvegarder", command=self.save_project, accelerator="Ctrl+S")
         file_menu.add_separator()
         file_menu.add_command(label="Importer...", command=self.import_files)
         file_menu.add_command(label="Exporter...", command=self.export_project)
@@ -131,12 +130,15 @@ class MainWindow:
         # Menu Codage
         coding_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Codage", menu=coding_menu)
-        coding_menu.add_command(label="Nouveau nœud...", command=self.create_node, accelerator="Ctrl+Shift+N")
-        coding_menu.add_command(label="Coder la sélection", command=self.code_selection, accelerator="Ctrl+K")
+        coding_menu.add_command(
+            label="Nouveau nœud...", command=self.create_node, accelerator="Ctrl+Shift+N"
+        )
+        coding_menu.add_command(
+            label="Coder la sélection", command=self.code_selection, accelerator="Ctrl+K"
+        )
         coding_menu.add_separator()
         coding_menu.add_command(
-            label="🔮 Détection automatique de nœuds...",
-            command=self.auto_detect_nodes
+            label="🔮 Détection automatique de nœuds...", command=self.auto_detect_nodes
         )
         coding_menu.add_separator()
         coding_menu.add_command(label="Gérer les nœuds...", command=self.manage_nodes)
@@ -166,7 +168,9 @@ class MainWindow:
         # Menu Aide
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Aide", menu=help_menu)
-        help_menu.add_command(label="📖 Guide d'utilisation", command=self.show_help, accelerator="F1")
+        help_menu.add_command(
+            label="📖 Guide d'utilisation", command=self.show_help, accelerator="F1"
+        )
         help_menu.add_command(label="⌨️ Raccourcis clavier", command=self.show_shortcuts_help)
         help_menu.add_separator()
         help_menu.add_command(label="À propos de Lele", command=self.show_about)
@@ -183,7 +187,9 @@ class MainWindow:
 
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
 
-        ttk.Button(toolbar, text="📥 Importer", command=self.import_files).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="📥 Importer", command=self.import_files).pack(
+            side=tk.LEFT, padx=2
+        )
 
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
 
@@ -192,7 +198,9 @@ class MainWindow:
 
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
 
-        ttk.Button(toolbar, text="🔍 Rechercher", command=self.show_search).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="🔍 Rechercher", command=self.show_search).pack(
+            side=tk.LEFT, padx=2
+        )
 
         # Recherche rapide
         ttk.Label(toolbar, text="  ").pack(side=tk.LEFT)
@@ -259,7 +267,9 @@ class MainWindow:
         btn_frame.pack(fill=tk.X, padx=5, pady=5)
 
         ttk.Button(btn_frame, text="+", width=3, command=self.import_files).pack(side=tk.LEFT)
-        ttk.Button(btn_frame, text="-", width=3, command=self.delete_source).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="-", width=3, command=self.delete_source).pack(
+            side=tk.LEFT, padx=2
+        )
 
         # Filtre par type
         self.source_type_filter = ttk.Combobox(
@@ -286,7 +296,9 @@ class MainWindow:
         self.sources_tree.column("type", width=60)
         self.sources_tree.column("refs", width=40)
 
-        sources_scroll = ttk.Scrollbar(self.sources_frame, orient=tk.VERTICAL, command=self.sources_tree.yview)
+        sources_scroll = ttk.Scrollbar(
+            self.sources_frame, orient=tk.VERTICAL, command=self.sources_tree.yview
+        )
         self.sources_tree.configure(yscrollcommand=sources_scroll.set)
 
         self.sources_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5, 0), pady=5)
@@ -307,8 +319,12 @@ class MainWindow:
         btn_frame.pack(fill=tk.X, padx=5, pady=5)
 
         ttk.Button(btn_frame, text="+", width=3, command=self.create_node).pack(side=tk.LEFT)
-        ttk.Button(btn_frame, text="-", width=3, command=self.delete_node).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="📁", width=3, command=self.create_node_folder).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="-", width=3, command=self.delete_node).pack(
+            side=tk.LEFT, padx=2
+        )
+        ttk.Button(btn_frame, text="📁", width=3, command=self.create_node_folder).pack(
+            side=tk.LEFT, padx=2
+        )
 
         # Bouton de détection automatique
         ttk.Button(
@@ -330,7 +346,9 @@ class MainWindow:
         self.nodes_tree.column("#0", width=180)
         self.nodes_tree.column("refs", width=40)
 
-        nodes_scroll = ttk.Scrollbar(self.nodes_frame, orient=tk.VERTICAL, command=self.nodes_tree.yview)
+        nodes_scroll = ttk.Scrollbar(
+            self.nodes_frame, orient=tk.VERTICAL, command=self.nodes_tree.yview
+        )
         self.nodes_tree.configure(yscrollcommand=nodes_scroll.set)
 
         self.nodes_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5, 0), pady=5)
@@ -641,7 +659,9 @@ class MainWindow:
         path_var = tk.StringVar()
         path_frame = ttk.Frame(dialog)
         path_frame.pack(padx=20, pady=5, fill=tk.X)
-        ttk.Entry(path_frame, textvariable=path_var, width=30).pack(side=tk.LEFT, expand=True, fill=tk.X)
+        ttk.Entry(path_frame, textvariable=path_var, width=30).pack(
+            side=tk.LEFT, expand=True, fill=tk.X
+        )
         ttk.Button(
             path_frame,
             text="...",
@@ -704,7 +724,10 @@ class MainWindow:
             return
 
         filetypes = [
-            ("Tous les fichiers supportés", "*.txt *.pdf *.docx *.mp3 *.wav *.mp4 *.jpg *.png *.xlsx *.csv"),
+            (
+                "Tous les fichiers supportés",
+                "*.txt *.pdf *.docx *.mp3 *.wav *.mp4 *.jpg *.png *.xlsx *.csv",
+            ),
             ("Documents texte", "*.txt *.md *.rtf"),
             ("PDF", "*.pdf"),
             ("Word", "*.doc *.docx"),
@@ -723,13 +746,20 @@ class MainWindow:
         """Importe une liste de fichiers."""
         # Vérifier si des fichiers audio/vidéo sont présents
         audio_video_extensions = {
-            ".mp3", ".wav", ".m4a", ".flac", ".ogg", ".webm",
-            ".mp4", ".avi", ".mov", ".mkv", ".wmv",
+            ".mp3",
+            ".wav",
+            ".m4a",
+            ".flac",
+            ".ogg",
+            ".webm",
+            ".mp4",
+            ".avi",
+            ".mov",
+            ".mkv",
+            ".wmv",
         }
 
-        has_audio_video = any(
-            Path(f).suffix.lower() in audio_video_extensions for f in files
-        )
+        has_audio_video = any(Path(f).suffix.lower() in audio_video_extensions for f in files)
 
         # Afficher le dialogue de paramètres si audio/vidéo détecté
         transcribe = True
@@ -786,14 +816,10 @@ class MainWindow:
         def update_progress(progress: float, message: str):
             """Callback pour mettre à jour la progression."""
             if not progress_dialog.cancelled:
-                progress_dialog.after(
-                    0, lambda: progress_dialog.set_step(progress, message)
-                )
+                progress_dialog.after(0, lambda: progress_dialog.set_step(progress, message))
                 # Logger les messages importants (durée, estimation) dans les détails
                 if "Audio:" in message or "Vidéo:" in message or "estimé:" in message:
-                    progress_dialog.after(
-                        0, lambda m=message: progress_dialog.log(f"  ⏱️ {m}")
-                    )
+                    progress_dialog.after(0, lambda m=message: progress_dialog.log(f"  ⏱️ {m}"))
 
         def do_import():
             sources_to_save = []
@@ -808,12 +834,8 @@ class MainWindow:
 
                 try:
                     filename = Path(file_path).name
-                    progress_dialog.after(
-                        0, lambda f=filename, n=i: progress_dialog.set_file(f, n)
-                    )
-                    progress_dialog.after(
-                        0, lambda f=filename: progress_dialog.log(f"Import: {f}")
-                    )
+                    progress_dialog.after(0, lambda f=filename, n=i: progress_dialog.set_file(f, n))
+                    progress_dialog.after(0, lambda f=filename: progress_dialog.log(f"Import: {f}"))
 
                     logger.info(f"Import du fichier: {file_path}")
                     importer = get_importer(file_path)
@@ -823,8 +845,17 @@ class MainWindow:
 
                     # Déterminer si c'est un fichier audio/vidéo
                     is_audio_video = Path(file_path).suffix.lower() in {
-                        ".mp3", ".wav", ".m4a", ".flac", ".ogg", ".webm",
-                        ".mp4", ".avi", ".mov", ".mkv", ".wmv",
+                        ".mp3",
+                        ".wav",
+                        ".m4a",
+                        ".flac",
+                        ".ogg",
+                        ".webm",
+                        ".mp4",
+                        ".avi",
+                        ".mov",
+                        ".mkv",
+                        ".wmv",
                     }
 
                     # Préparer les options d'import
@@ -901,7 +932,9 @@ class MainWindow:
         thread = threading.Thread(target=do_import, daemon=True)
         thread.start()
 
-    def _on_import_complete(self, sources: list, errors: list, progress_dialog: ImportProgressDialog):
+    def _on_import_complete(
+        self, sources: list, errors: list, progress_dialog: ImportProgressDialog
+    ):
         """Callback appelé quand l'import est terminé."""
         # Sauvegarder les sources dans le thread principal (évite les erreurs SQLite)
         saved_count = 0
@@ -965,7 +998,9 @@ class MainWindow:
 
     # --- Actions de codage ---
 
-    def create_node(self, initial_name: str = "", parent_node: Node | None = None, code_selection: bool = False):
+    def create_node(
+        self, initial_name: str = "", parent_node: Node | None = None, code_selection: bool = False
+    ):
         """Crée un nouveau nœud avec dialogue amélioré.
 
         Args:
@@ -998,7 +1033,9 @@ class MainWindow:
         ttk.Entry(dialog, textvariable=desc_var, width=45).pack(padx=20, pady=5)
 
         # Couleur
-        ttk.Label(dialog, text="Couleur:", font=("", 10, "bold")).pack(padx=20, pady=(15, 5), anchor=tk.W)
+        ttk.Label(dialog, text="Couleur:", font=("", 10, "bold")).pack(
+            padx=20, pady=(15, 5), anchor=tk.W
+        )
         color_var = tk.StringVar(value="#3498db")
 
         color_frame = ttk.Frame(dialog)
@@ -1006,10 +1043,22 @@ class MainWindow:
 
         # Palette de couleurs étendue
         colors = [
-            "#e74c3c", "#e91e63", "#9b59b6", "#673ab7",
-            "#3498db", "#2196f3", "#00bcd4", "#009688",
-            "#2ecc71", "#4caf50", "#8bc34a", "#cddc39",
-            "#f39c12", "#ff9800", "#ff5722", "#795548",
+            "#e74c3c",
+            "#e91e63",
+            "#9b59b6",
+            "#673ab7",
+            "#3498db",
+            "#2196f3",
+            "#00bcd4",
+            "#009688",
+            "#2ecc71",
+            "#4caf50",
+            "#8bc34a",
+            "#cddc39",
+            "#f39c12",
+            "#ff9800",
+            "#ff5722",
+            "#795548",
         ]
 
         self._color_buttons = []
@@ -1042,6 +1091,7 @@ class MainWindow:
 
         def update_preview(*args):
             self._color_preview.configure(fg=color_var.get())
+
         color_var.trace_add("write", update_preview)
 
         # Parent
@@ -1176,7 +1226,9 @@ class MainWindow:
                 label="Sans horodatages (paragraphes)",
                 command=lambda: self._reformat_transcription(show_timestamps=False),
             )
-            self.text_context_menu.add_cascade(label="🔄 Reformater la transcription", menu=reformat_menu)
+            self.text_context_menu.add_cascade(
+                label="🔄 Reformater la transcription", menu=reformat_menu
+            )
 
         self.text_context_menu.tk_popup(event.x_root, event.y_root)
 
@@ -1204,7 +1256,7 @@ class MainWindow:
         if not segments:
             messagebox.showwarning(
                 "Reformatage impossible",
-                "Cette source ne contient pas de segments de transcription."
+                "Cette source ne contient pas de segments de transcription.",
             )
             return
 
@@ -1215,7 +1267,7 @@ class MainWindow:
             f"Voulez-vous reformater le texte {format_type} ?\n\n"
             "Le contenu sera mis à jour mais les segments originaux seront préservés.\n"
             "Note : Les codages existants pourraient être décalés.",
-            icon="question"
+            icon="question",
         )
 
         if not confirm:
@@ -1238,10 +1290,7 @@ class MainWindow:
         # Rafraîchir l'affichage
         self.display_source()
 
-        messagebox.showinfo(
-            "Reformatage terminé",
-            f"Le texte a été reformaté {format_type}."
-        )
+        messagebox.showinfo("Reformatage terminé", f"Le texte a été reformaté {format_type}.")
 
     def _show_node_context_menu(self, event):
         """Affiche le menu contextuel sur un nœud."""
@@ -1406,10 +1455,22 @@ class MainWindow:
         color_frame.pack(padx=20, pady=5)
 
         colors = [
-            "#e74c3c", "#e91e63", "#9b59b6", "#673ab7",
-            "#3498db", "#2196f3", "#00bcd4", "#009688",
-            "#2ecc71", "#4caf50", "#8bc34a", "#cddc39",
-            "#f39c12", "#ff9800", "#ff5722", "#795548",
+            "#e74c3c",
+            "#e91e63",
+            "#9b59b6",
+            "#673ab7",
+            "#3498db",
+            "#2196f3",
+            "#00bcd4",
+            "#009688",
+            "#2ecc71",
+            "#4caf50",
+            "#8bc34a",
+            "#cddc39",
+            "#f39c12",
+            "#ff9800",
+            "#ff5722",
+            "#795548",
         ]
 
         for i, color in enumerate(colors):
@@ -1464,10 +1525,7 @@ class MainWindow:
     def auto_detect_nodes(self):
         """Lance la détection automatique de nœuds."""
         if not self.project:
-            messagebox.showwarning(
-                "Attention",
-                "Veuillez d'abord créer ou ouvrir un projet."
-            )
+            messagebox.showwarning("Attention", "Veuillez d'abord créer ou ouvrir un projet.")
             return
 
         # Récupérer les sources avec contenu textuel
@@ -1487,15 +1545,12 @@ class MainWindow:
             messagebox.showwarning(
                 "Attention",
                 "Aucune source avec contenu textuel suffisant.\n"
-                "Importez des documents avant d'utiliser la détection automatique."
+                "Importez des documents avant d'utiliser la détection automatique.",
             )
             return
 
         # Récupérer les nœuds existants
-        existing_nodes = [
-            {"id": n.id, "name": n.name}
-            for n in Node.get_all(self.project.db)
-        ]
+        existing_nodes = [{"id": n.id, "name": n.name} for n in Node.get_all(self.project.db)]
 
         # Charger les settings
         settings = self.settings_manager.settings
@@ -1555,8 +1610,7 @@ class MainWindow:
                 def on_progress(progress: float, message: str):
                     if not progress_dialog.cancelled:
                         progress_dialog.after(
-                            0,
-                            lambda: progress_dialog.update_progress(progress, message)
+                            0, lambda: progress_dialog.update_progress(progress, message)
                         )
 
                 # Exécuter l'analyse
@@ -1587,7 +1641,7 @@ class MainWindow:
             messagebox.showinfo(
                 "Résultat",
                 "Aucun thème détecté.\n\n"
-                "Essayez avec des paramètres différents ou ajoutez plus de contenu."
+                "Essayez avec des paramètres différents ou ajoutez plus de contenu.",
             )
             return
 
@@ -1616,17 +1670,14 @@ class MainWindow:
                 "Succès",
                 f"Auto-codage terminé !\n\n"
                 f"• {n_nodes} nouveau(x) nœud(s) créé(s)\n"
-                f"• {n_segments} segment(s) codé(s)"
+                f"• {n_segments} segment(s) codé(s)",
             )
 
             self.update_status(f"Auto-codage: {n_nodes} nœuds, {n_segments} codages")
 
         except Exception as e:
             logger.error(f"Erreur création nœuds: {e}")
-            messagebox.showerror(
-                "Erreur",
-                f"Erreur lors de la création des nœuds:\n{e}"
-            )
+            messagebox.showerror("Erreur", f"Erreur lors de la création des nœuds:\n{e}")
 
     def _on_auto_coding_error(self, error_message: str, progress_dialog):
         """Gère une erreur d'auto-codage."""
@@ -1635,7 +1686,7 @@ class MainWindow:
             "Erreur",
             f"Erreur lors de l'analyse automatique:\n\n{error_message}\n\n"
             "Vérifiez que les dépendances sont installées:\n"
-            "pip install sentence-transformers umap-learn hdbscan"
+            "pip install sentence-transformers umap-learn hdbscan",
         )
 
     def delete_node(self):
@@ -1708,7 +1759,7 @@ class MainWindow:
             Couleur éclaircie au format #RRGGBB
         """
         # Nettoyer la couleur
-        color = hex_color.lstrip('#')
+        color = hex_color.lstrip("#")
         if len(color) != 6:
             return "#FFFF99"  # Jaune par défaut si format invalide
 
@@ -1980,8 +2031,7 @@ class MainWindow:
         scrollable_frame = ttk.Frame(canvas)
 
         scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
 
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
@@ -1989,65 +2039,86 @@ class MainWindow:
 
         # Contenu de l'aide
         help_sections = [
-            ("🚀 Démarrage rapide", [
-                "1. Créez un projet: Fichier > Nouveau projet (Ctrl+N)",
-                "2. Importez des fichiers: glissez-déposez ou Fichier > Importer",
-                "3. Créez des nœuds (codes) dans le panneau Nœuds",
-                "4. Sélectionnez du texte et codez-le avec Ctrl+K",
-            ]),
-            ("📁 Gestion des projets", [
-                "• Nouveau projet: Fichier > Nouveau projet",
-                "• Ouvrir: Fichier > Ouvrir projet",
-                "• Sauvegarder: Fichier > Sauvegarder (Ctrl+S)",
-                "• Projets récents accessibles via Fichier > Projets récents",
-            ]),
-            ("📥 Import de données", [
-                "Formats supportés:",
-                "• Documents: TXT, PDF, Word (.docx), RTF",
-                "• Média: Audio (MP3, WAV, FLAC), Vidéo (MP4, AVI, MOV)",
-                "• Images: JPG, PNG, GIF, BMP, TIFF",
-                "• Tableurs: Excel (.xlsx), CSV",
-                "• Bibliographie: RIS, BibTeX",
-                "",
-                "Pour l'audio/vidéo, la transcription automatique est disponible",
-                "via le moteur Whisper (OpenAI).",
-            ]),
-            ("🏷️ Codage", [
-                "Méthode classique:",
-                "1. Ouvrez une source (double-clic)",
-                "2. Sélectionnez un nœud dans le panneau Nœuds",
-                "3. Surlignez le texte à coder",
-                "4. Appuyez sur Ctrl+K",
-                "",
-                "Méthode rapide:",
-                "• Surlignez du texte → clic droit → \"Coder avec\"",
-                "• Ou double-cliquez sur un nœud avec du texte sélectionné",
-                "",
-                "Créer et coder en même temps:",
-                "• Surlignez du texte → Ctrl+Shift+K",
-            ]),
-            ("🔮 Détection automatique de thèmes", [
-                "1. Cliquez sur \"🔮 Auto\" dans le panneau Nœuds",
-                "2. Sélectionnez les sources à analyser",
-                "3. Configurez les paramètres (granularité, nb max de thèmes)",
-                "4. Validez les thèmes proposés avant création",
-                "",
-                "Pour un meilleur nommage, configurez Ollama dans",
-                "Paramètres > IA / LLM local.",
-            ]),
-            ("📊 Visualisations", [
-                "Menu Analyse propose:",
-                "• Nuage de mots: fréquence des termes",
-                "• Carte mentale: hiérarchie des nœuds",
-                "• Sociogramme: co-occurrences entre nœuds",
-                "• Matrice: croisement nœuds × sources",
-            ]),
-            ("💡 Conseils", [
-                "• Utilisez les couleurs pour distinguer les thèmes",
-                "• Créez une hiérarchie de nœuds (sous-nœuds)",
-                "• Documentez vos décisions dans les mémos",
-                "• Sauvegardez régulièrement votre projet",
-            ]),
+            (
+                "🚀 Démarrage rapide",
+                [
+                    "1. Créez un projet: Fichier > Nouveau projet (Ctrl+N)",
+                    "2. Importez des fichiers: glissez-déposez ou Fichier > Importer",
+                    "3. Créez des nœuds (codes) dans le panneau Nœuds",
+                    "4. Sélectionnez du texte et codez-le avec Ctrl+K",
+                ],
+            ),
+            (
+                "📁 Gestion des projets",
+                [
+                    "• Nouveau projet: Fichier > Nouveau projet",
+                    "• Ouvrir: Fichier > Ouvrir projet",
+                    "• Sauvegarder: Fichier > Sauvegarder (Ctrl+S)",
+                    "• Projets récents accessibles via Fichier > Projets récents",
+                ],
+            ),
+            (
+                "📥 Import de données",
+                [
+                    "Formats supportés:",
+                    "• Documents: TXT, PDF, Word (.docx), RTF",
+                    "• Média: Audio (MP3, WAV, FLAC), Vidéo (MP4, AVI, MOV)",
+                    "• Images: JPG, PNG, GIF, BMP, TIFF",
+                    "• Tableurs: Excel (.xlsx), CSV",
+                    "• Bibliographie: RIS, BibTeX",
+                    "",
+                    "Pour l'audio/vidéo, la transcription automatique est disponible",
+                    "via le moteur Whisper (OpenAI).",
+                ],
+            ),
+            (
+                "🏷️ Codage",
+                [
+                    "Méthode classique:",
+                    "1. Ouvrez une source (double-clic)",
+                    "2. Sélectionnez un nœud dans le panneau Nœuds",
+                    "3. Surlignez le texte à coder",
+                    "4. Appuyez sur Ctrl+K",
+                    "",
+                    "Méthode rapide:",
+                    '• Surlignez du texte → clic droit → "Coder avec"',
+                    "• Ou double-cliquez sur un nœud avec du texte sélectionné",
+                    "",
+                    "Créer et coder en même temps:",
+                    "• Surlignez du texte → Ctrl+Shift+K",
+                ],
+            ),
+            (
+                "🔮 Détection automatique de thèmes",
+                [
+                    '1. Cliquez sur "🔮 Auto" dans le panneau Nœuds',
+                    "2. Sélectionnez les sources à analyser",
+                    "3. Configurez les paramètres (granularité, nb max de thèmes)",
+                    "4. Validez les thèmes proposés avant création",
+                    "",
+                    "Pour un meilleur nommage, configurez Ollama dans",
+                    "Paramètres > IA / LLM local.",
+                ],
+            ),
+            (
+                "📊 Visualisations",
+                [
+                    "Menu Analyse propose:",
+                    "• Nuage de mots: fréquence des termes",
+                    "• Carte mentale: hiérarchie des nœuds",
+                    "• Sociogramme: co-occurrences entre nœuds",
+                    "• Matrice: croisement nœuds × sources",
+                ],
+            ),
+            (
+                "💡 Conseils",
+                [
+                    "• Utilisez les couleurs pour distinguer les thèmes",
+                    "• Créez une hiérarchie de nœuds (sous-nœuds)",
+                    "• Documentez vos décisions dans les mémos",
+                    "• Sauvegardez régulièrement votre projet",
+                ],
+            ),
         ]
 
         for title, lines in help_sections:
@@ -2230,9 +2301,7 @@ class MainWindow:
             settings.autocoding_embedding_model = dialog.result_embedding_model
             self.settings_manager.save()
 
-            self.update_status(
-                f"Paramètres IA: {dialog.result_provider}/{dialog.result_model}"
-            )
+            self.update_status(f"Paramètres IA: {dialog.result_provider}/{dialog.result_model}")
 
     # --- Rafraîchissement de l'interface ---
 
@@ -2399,7 +2468,7 @@ class MainWindow:
                 source_content = source_contents.get(ref.source_id, "")
                 if source_content and ref.start_pos <= len(source_content):
                     # Compter les sauts de ligne avant start_pos
-                    line_num = source_content[:ref.start_pos].count("\n") + 1
+                    line_num = source_content[: ref.start_pos].count("\n") + 1
 
             self.refs_tree.insert(
                 "",
@@ -2445,7 +2514,9 @@ class MainWindow:
                     display_lines = 1
                 else:
                     # count retourne un tuple, on prend le premier élément
-                    display_lines = display_lines[0] if isinstance(display_lines, tuple) else display_lines
+                    display_lines = (
+                        display_lines[0] if isinstance(display_lines, tuple) else display_lines
+                    )
                     display_lines = max(1, display_lines)
             except tk.TclError:
                 display_lines = 1

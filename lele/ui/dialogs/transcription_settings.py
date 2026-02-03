@@ -11,7 +11,6 @@ from ...utils.system import (
     get_pytorch_install_command,
 )
 
-
 # Informations sur les modèles Whisper
 WHISPER_MODELS = [
     ("tiny", "Tiny - Très rapide (~1GB VRAM)", "~39 MB"),
@@ -236,9 +235,7 @@ class TranscriptionSettingsDialog(tk.Toplevel):
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=(20, 0))
 
-        ttk.Button(btn_frame, text="Annuler", command=self.cancel).pack(
-            side=tk.RIGHT, padx=(5, 0)
-        )
+        ttk.Button(btn_frame, text="Annuler", command=self.cancel).pack(side=tk.RIGHT, padx=(5, 0))
         self.ok_btn = ttk.Button(btn_frame, text="OK", command=self.apply)
         self.ok_btn.pack(side=tk.RIGHT)
 
@@ -279,7 +276,9 @@ class TranscriptionSettingsDialog(tk.Toplevel):
         # PyTorch status
         if system_info.torch_available:
             if system_info.torch_cuda_available:
-                torch_text = f"PyTorch: {system_info.torch_version} (CUDA {system_info.torch_cuda_version})"
+                torch_text = (
+                    f"PyTorch: {system_info.torch_version} (CUDA {system_info.torch_cuda_version})"
+                )
                 torch_color = "#228B22"
             else:
                 torch_text = f"PyTorch: {system_info.torch_version} (CPU uniquement)"
@@ -398,7 +397,7 @@ class ModelDownloadDialog(tk.Toplevel):
         ttk.Label(
             main_frame,
             text="Cette opération peut prendre quelques minutes.\n"
-                 "L'application reste utilisable pendant le téléchargement.",
+            "L'application reste utilisable pendant le téléchargement.",
             foreground="#666666",
             font=("", 9),
         ).pack(anchor=tk.W, pady=(5, 15))
@@ -499,9 +498,7 @@ class ImportProgressDialog(tk.Toplevel):
         step_frame.pack(fill=tk.X, pady=(10, 0))
 
         ttk.Label(step_frame, text="Étape:", width=12).pack(side=tk.LEFT)
-        self.step_progress = ttk.Progressbar(
-            step_frame, mode="determinate", maximum=100
-        )
+        self.step_progress = ttk.Progressbar(step_frame, mode="determinate", maximum=100)
         self.step_progress.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
 
         # Message d'étape
@@ -542,9 +539,7 @@ class ImportProgressDialog(tk.Toplevel):
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=(15, 0))
 
-        self.cancel_btn = ttk.Button(
-            btn_frame, text="Annuler", command=self._on_cancel
-        )
+        self.cancel_btn = ttk.Button(btn_frame, text="Annuler", command=self._on_cancel)
         self.cancel_btn.pack(side=tk.RIGHT)
 
     def _center_window(self, parent):
@@ -598,13 +593,9 @@ class ImportProgressDialog(tk.Toplevel):
         self.files_progress["value"] = self.total_files
 
         if error_count == 0:
-            self.step_label.configure(
-                text=f"✅ {success_count} fichier(s) importé(s) avec succès"
-            )
+            self.step_label.configure(text=f"✅ {success_count} fichier(s) importé(s) avec succès")
         else:
-            self.step_label.configure(
-                text=f"⚠️ {success_count} réussi(s), {error_count} erreur(s)"
-            )
+            self.step_label.configure(text=f"⚠️ {success_count} réussi(s), {error_count} erreur(s)")
 
         self.step_progress["value"] = 100
         self.cancel_btn.configure(text="Fermer", state=tk.NORMAL, command=self.destroy)

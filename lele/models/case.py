@@ -154,15 +154,11 @@ class Classification:
     @classmethod
     def get(cls, db, classification_id: str) -> Optional["Classification"]:
         """Récupère une classification par ID."""
-        cursor = db.execute(
-            "SELECT * FROM classifications WHERE id = ?", (classification_id,)
-        )
+        cursor = db.execute("SELECT * FROM classifications WHERE id = ?", (classification_id,))
         row = cursor.fetchone()
         if row:
             classification = cls.from_row(dict(row))
-            classification.attributes = Attribute.get_by_classification(
-                db, classification_id
-            )
+            classification.attributes = Attribute.get_by_classification(db, classification_id)
             return classification
         return None
 
@@ -319,9 +315,7 @@ class Case:
         return None
 
     @classmethod
-    def get_all(
-        cls, db, classification_id: Optional[str] = None
-    ) -> list["Case"]:
+    def get_all(cls, db, classification_id: Optional[str] = None) -> list["Case"]:
         """Récupère tous les cas."""
         if classification_id:
             cursor = db.execute(
@@ -355,6 +349,7 @@ class Case:
     def link_source(self, db, source_id: str, link_type: str = "contains"):
         """Lie une source à ce cas."""
         from datetime import datetime
+
         link_id = str(uuid.uuid4())
         db.execute(
             """

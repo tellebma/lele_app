@@ -100,9 +100,7 @@ class VideoImporter(BaseImporter):
                 self.report_progress(0.85, "Extraction des images...")
 
                 try:
-                    frames = self._extract_frames(
-                        file_path, project_files_path, frame_interval
-                    )
+                    frames = self._extract_frames(file_path, project_files_path, frame_interval)
                     extra_metadata["extracted_frames"] = frames
                 except Exception as e:
                     warnings.append(f"Erreur d'extraction des frames: {e}")
@@ -192,9 +190,7 @@ class VideoImporter(BaseImporter):
                             metadata["codec"] = stream.get("codec_name")
                             break
                     if "format" in data:
-                        metadata["duration"] = float(
-                            data["format"].get("duration", 0)
-                        )
+                        metadata["duration"] = float(data["format"].get("duration", 0))
 
             except Exception:
                 pass
@@ -249,8 +245,7 @@ class VideoImporter(BaseImporter):
             pass
 
         raise ImportError(
-            "Installez moviepy ou ffmpeg pour extraire l'audio: "
-            "pip install moviepy"
+            "Installez moviepy ou ffmpeg pour extraire l'audio: " "pip install moviepy"
         )
 
     def _transcribe(
@@ -296,11 +291,13 @@ class VideoImporter(BaseImporter):
         # Simplifier les segments
         simplified_segments = []
         for seg in result.get("segments", []):
-            simplified_segments.append({
-                "start": seg["start"],
-                "end": seg["end"],
-                "text": seg["text"],
-            })
+            simplified_segments.append(
+                {
+                    "start": seg["start"],
+                    "end": seg["end"],
+                    "text": seg["text"],
+                }
+            )
 
         return {
             "text": result["text"].strip(),
@@ -308,9 +305,7 @@ class VideoImporter(BaseImporter):
             "segments": simplified_segments,
         }
 
-    def _format_transcript(
-        self, segments: list[dict], show_timestamps: bool = False
-    ) -> str:
+    def _format_transcript(self, segments: list[dict], show_timestamps: bool = False) -> str:
         """
         Formate la transcription avec sauts de ligne entre segments.
 
@@ -379,10 +374,18 @@ class VideoImporter(BaseImporter):
         # Facteurs de vitesse approximatifs
         speed_factors = {
             "cuda": {
-                "tiny": 0.05, "base": 0.08, "small": 0.15, "medium": 0.3, "large": 0.6,
+                "tiny": 0.05,
+                "base": 0.08,
+                "small": 0.15,
+                "medium": 0.3,
+                "large": 0.6,
             },
             "cpu": {
-                "tiny": 0.3, "base": 0.5, "small": 1.0, "medium": 2.5, "large": 6.0,
+                "tiny": 0.3,
+                "base": 0.5,
+                "small": 1.0,
+                "medium": 2.5,
+                "large": 6.0,
             },
         }
 
@@ -399,9 +402,7 @@ class VideoImporter(BaseImporter):
 
         return estimated
 
-    def _extract_frames(
-        self, video_path: Path, output_dir: Path, interval: int
-    ) -> list[str]:
+    def _extract_frames(self, video_path: Path, output_dir: Path, interval: int) -> list[str]:
         """Extrait des frames à intervalles réguliers."""
         frames_dir = output_dir / f"{video_path.stem}_frames"
         frames_dir.mkdir(exist_ok=True)
@@ -434,8 +435,7 @@ class VideoImporter(BaseImporter):
 
         except ImportError:
             raise ImportError(
-                "Installez opencv-python pour extraire les frames: "
-                "pip install opencv-python"
+                "Installez opencv-python pour extraire les frames: " "pip install opencv-python"
             )
 
         return frames

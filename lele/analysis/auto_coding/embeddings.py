@@ -84,9 +84,7 @@ class EmbeddingEngine:
         except ImportError:
             return False
 
-    def load_model(
-        self, progress_callback: Callable[[float, str], None] | None = None
-    ) -> bool:
+    def load_model(self, progress_callback: Callable[[float, str], None] | None = None) -> bool:
         """Charge le modèle en mémoire.
 
         Args:
@@ -166,9 +164,7 @@ class EmbeddingEngine:
                 return _embedding_cache[cache_key]
 
         # Générer l'embedding
-        embedding = self._model.encode(
-            text, normalize_embeddings=True, show_progress_bar=False
-        )
+        embedding = self._model.encode(text, normalize_embeddings=True, show_progress_bar=False)
         result = embedding.tolist()
 
         # Mettre en cache
@@ -292,10 +288,7 @@ class EmbeddingEngine:
     @classmethod
     def get_available_models(cls) -> list[dict]:
         """Retourne la liste des modèles disponibles avec leurs infos."""
-        return [
-            {"id": model_id, **info}
-            for model_id, info in cls.AVAILABLE_MODELS.items()
-        ]
+        return [{"id": model_id, **info} for model_id, info in cls.AVAILABLE_MODELS.items()]
 
 
 def clear_embedding_cache():

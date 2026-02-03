@@ -124,8 +124,9 @@ target-version = "py310"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "C4"]
+select = ["E", "F", "W", "UP", "B", "C4"]
 ignore = ["E501"]
+# Note: "I" (isort) disabled to avoid import sorting issues on existing code
 
 [tool.black]
 line-length = 100

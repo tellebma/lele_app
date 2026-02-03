@@ -79,9 +79,7 @@ class SociogramGenerator:
         pos = nx.spring_layout(G, k=2, iterations=50)
 
         # Tailles et couleurs des nœuds
-        node_sizes = [
-            300 + G.nodes[n].get("size", 1) * 50 for n in G.nodes()
-        ]
+        node_sizes = [300 + G.nodes[n].get("size", 1) * 50 for n in G.nodes()]
         node_colors = [G.nodes[n].get("color", "#3498db") for n in G.nodes()]
 
         # Épaisseurs des arêtes
@@ -90,9 +88,7 @@ class SociogramGenerator:
         edge_widths = [1 + 3 * w / max_weight for w in edge_weights]
 
         # Dessiner les arêtes
-        nx.draw_networkx_edges(
-            G, pos, ax=ax, width=edge_widths, alpha=0.5, edge_color="#cccccc"
-        )
+        nx.draw_networkx_edges(G, pos, ax=ax, width=edge_widths, alpha=0.5, edge_color="#cccccc")
 
         # Dessiner les nœuds
         nx.draw_networkx_nodes(
@@ -105,9 +101,7 @@ class SociogramGenerator:
 
         # Labels des arêtes (poids)
         edge_labels = {e: G.edges[e].get("weight", "") for e in G.edges()}
-        nx.draw_networkx_edge_labels(
-            G, pos, ax=ax, edge_labels=edge_labels, font_size=7
-        )
+        nx.draw_networkx_edge_labels(G, pos, ax=ax, edge_labels=edge_labels, font_size=7)
 
         ax.axis("off")
         ax.set_title("Co-occurrence des codes")
@@ -184,14 +178,10 @@ class SociogramGenerator:
 
         # Calculer les similarités (Jaccard sur les nœuds)
         for i, source1 in enumerate(sources):
-            nodes1 = set(
-                r.node_id for r in CodeReference.get_by_source(self.db, source1.id)
-            )
+            nodes1 = set(r.node_id for r in CodeReference.get_by_source(self.db, source1.id))
 
             for source2 in sources[i + 1 :]:
-                nodes2 = set(
-                    r.node_id for r in CodeReference.get_by_source(self.db, source2.id)
-                )
+                nodes2 = set(r.node_id for r in CodeReference.get_by_source(self.db, source2.id))
 
                 if nodes1 and nodes2:
                     intersection = len(nodes1 & nodes2)
@@ -220,17 +210,12 @@ class SociogramGenerator:
             "image": "#f39c12",
             "spreadsheet": "#1abc9c",
         }
-        node_colors = [
-            type_colors.get(G.nodes[n].get("type", ""), "#95a5a6")
-            for n in G.nodes()
-        ]
+        node_colors = [type_colors.get(G.nodes[n].get("type", ""), "#95a5a6") for n in G.nodes()]
 
         edge_weights = [G.edges[e].get("weight", 0) for e in G.edges()]
         edge_widths = [1 + 4 * w for w in edge_weights]
 
-        nx.draw_networkx_edges(
-            G, pos, ax=ax, width=edge_widths, alpha=0.4, edge_color="#cccccc"
-        )
+        nx.draw_networkx_edges(G, pos, ax=ax, width=edge_widths, alpha=0.4, edge_color="#cccccc")
         nx.draw_networkx_nodes(
             G, pos, ax=ax, node_size=node_sizes, node_color=node_colors, alpha=0.9
         )
@@ -304,13 +289,10 @@ class SociogramGenerator:
                 )
 
             for i, source1 in enumerate(sources):
-                nodes1 = set(
-                    r.node_id for r in CodeReference.get_by_source(self.db, source1.id)
-                )
+                nodes1 = set(r.node_id for r in CodeReference.get_by_source(self.db, source1.id))
                 for source2 in sources[i + 1 :]:
                     nodes2 = set(
-                        r.node_id
-                        for r in CodeReference.get_by_source(self.db, source2.id)
+                        r.node_id for r in CodeReference.get_by_source(self.db, source2.id)
                     )
                     if nodes1 and nodes2:
                         intersection = len(nodes1 & nodes2)

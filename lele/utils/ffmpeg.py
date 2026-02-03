@@ -136,8 +136,7 @@ def setup_ffmpeg() -> bool:
     ffmpeg_path = get_ffmpeg_path()
     if not ffmpeg_path:
         logger.error(
-            "FFmpeg n'est pas disponible. "
-            "Installez-le avec: pip install imageio-ffmpeg"
+            "FFmpeg n'est pas disponible. " "Installez-le avec: pip install imageio-ffmpeg"
         )
         return False
 

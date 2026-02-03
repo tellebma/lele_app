@@ -77,7 +77,9 @@ class AudioImporter(BaseImporter):
 
                 # Récupérer la durée pour l'affichage
                 audio_duration = extra_metadata.get("duration")
-                duration_str = self._format_duration(audio_duration) if audio_duration else "durée inconnue"
+                duration_str = (
+                    self._format_duration(audio_duration) if audio_duration else "durée inconnue"
+                )
 
                 self.report_progress(0.3, f"Chargement du modèle {whisper_model}...")
 
@@ -100,7 +102,9 @@ class AudioImporter(BaseImporter):
                     self.report_progress(0.9, "Transcription terminée")
 
                 except ImportError as e:
-                    warning_msg = "Whisper non installé. Installez-le avec: pip install openai-whisper"
+                    warning_msg = (
+                        "Whisper non installé. Installez-le avec: pip install openai-whisper"
+                    )
                     warnings.append(warning_msg)
                     logger.error(f"ImportError: {warning_msg}")
                     logger.debug(traceback.format_exc())
@@ -198,8 +202,7 @@ class AudioImporter(BaseImporter):
         ffmpeg_info = check_ffmpeg()
         if not ffmpeg_info["available"]:
             raise RuntimeError(
-                "FFmpeg n'est pas disponible. "
-                "Installez-le avec: pip install imageio-ffmpeg"
+                "FFmpeg n'est pas disponible. " "Installez-le avec: pip install imageio-ffmpeg"
             )
         logger.info(f"FFmpeg disponible: {ffmpeg_info['source']} - {ffmpeg_info['path']}")
 
@@ -213,7 +216,9 @@ class AudioImporter(BaseImporter):
         system_info = get_system_info()
 
         if system_info.torch_cuda_available:
-            logger.info(f"✅ GPU CUDA disponible: {system_info.gpus[0].name if system_info.gpus else 'Unknown'}")
+            logger.info(
+                f"✅ GPU CUDA disponible: {system_info.gpus[0].name if system_info.gpus else 'Unknown'}"
+            )
             logger.info(f"   CUDA version: {system_info.torch_cuda_version}")
             if system_info.gpus:
                 gpu = system_info.gpus[0]
@@ -247,9 +252,7 @@ class AudioImporter(BaseImporter):
         logger.info(f"Début de la transcription de: {file_path}")
 
         # Estimer le temps de transcription
-        estimated_time = self._estimate_transcription_time(
-            audio_duration, model_name, device
-        )
+        estimated_time = self._estimate_transcription_time(audio_duration, model_name, device)
 
         # Construire le message de progression
         duration_str = self._format_duration(audio_duration) if audio_duration else ""
@@ -278,18 +281,22 @@ class AudioImporter(BaseImporter):
         else:
             options["fp16"] = False
 
-        logger.info(f"Appel de model.transcribe() - durée audio: {duration_str}, temps estimé: ~{estimate_str}")
+        logger.info(
+            f"Appel de model.transcribe() - durée audio: {duration_str}, temps estimé: ~{estimate_str}"
+        )
         result = model.transcribe(str(file_path), **options)
         logger.info("Transcription terminée")
 
         # Simplifier les segments pour le stockage
         simplified_segments = []
         for seg in result.get("segments", []):
-            simplified_segments.append({
-                "start": seg["start"],
-                "end": seg["end"],
-                "text": seg["text"],
-            })
+            simplified_segments.append(
+                {
+                    "start": seg["start"],
+                    "end": seg["end"],
+                    "text": seg["text"],
+                }
+            )
 
         text = result["text"].strip()
         logger.info(f"Résultat: {len(text)} caractères, {len(simplified_segments)} segments")
@@ -300,9 +307,7 @@ class AudioImporter(BaseImporter):
             "segments": simplified_segments,
         }
 
-    def _format_transcript(
-        self, segments: list[dict], show_timestamps: bool = False
-    ) -> str:
+    def _format_transcript(self, segments: list[dict], show_timestamps: bool = False) -> str:
         """
         Formate la transcription avec sauts de ligne entre segments.
 
@@ -395,18 +400,18 @@ class AudioImporter(BaseImporter):
         # < 1.0 = plus rapide que temps réel, > 1.0 = plus lent
         speed_factors = {
             "cuda": {
-                "tiny": 0.05,    # ~20x temps réel
-                "base": 0.08,    # ~12x temps réel
-                "small": 0.15,   # ~7x temps réel
-                "medium": 0.3,   # ~3x temps réel
-                "large": 0.6,    # ~1.5x temps réel
+                "tiny": 0.05,  # ~20x temps réel
+                "base": 0.08,  # ~12x temps réel
+                "small": 0.15,  # ~7x temps réel
+                "medium": 0.3,  # ~3x temps réel
+                "large": 0.6,  # ~1.5x temps réel
             },
             "cpu": {
-                "tiny": 0.3,     # ~3x temps réel
-                "base": 0.5,     # ~2x temps réel
-                "small": 1.0,    # ~temps réel
-                "medium": 2.5,   # ~0.4x temps réel
-                "large": 6.0,    # ~0.16x temps réel
+                "tiny": 0.3,  # ~3x temps réel
+                "base": 0.5,  # ~2x temps réel
+                "small": 1.0,  # ~temps réel
+                "medium": 2.5,  # ~0.4x temps réel
+                "large": 6.0,  # ~0.16x temps réel
             },
         }
 

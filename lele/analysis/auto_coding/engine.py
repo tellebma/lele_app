@@ -131,9 +131,7 @@ class AutoCodingEngine:
             max_clusters=config.max_themes,
             progress_callback=clustering_progress,
         )
-        logger.info(
-            f"Clustering: {len(clusters)} clusters, {len(noise_segments)} segments bruit"
-        )
+        logger.info(f"Clustering: {len(clusters)} clusters, {len(noise_segments)} segments bruit")
 
         if not clusters:
             logger.warning("Aucun cluster détecté")
@@ -308,9 +306,7 @@ class AutoCodingEngine:
             raw_segments = self._split_by_paragraphs(text)
 
         # Normaliser les segments (fusion des trop courts, découpe des trop longs)
-        normalized = self._normalize_segments(
-            raw_segments, min_length, max_length
-        )
+        normalized = self._normalize_segments(raw_segments, min_length, max_length)
 
         # Créer les objets Segment
         segments = []
@@ -353,6 +349,7 @@ class AutoCodingEngine:
         try:
             if self._spacy_nlp is None:
                 import spacy
+
                 try:
                     self._spacy_nlp = spacy.load("fr_core_news_sm")
                 except OSError:
@@ -516,11 +513,13 @@ def create_nodes_from_proposals(
             node_id = node.id
             node_name = node.name
 
-            created_nodes.append({
-                "id": node_id,
-                "name": node_name,
-                "is_new": True,
-            })
+            created_nodes.append(
+                {
+                    "id": node_id,
+                    "name": node_name,
+                    "is_new": True,
+                }
+            )
 
         # Créer les références de codage
         for segment in proposal.segments:

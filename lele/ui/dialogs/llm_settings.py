@@ -66,9 +66,7 @@ class LLMSettingsDialog(tk.Toplevel):
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         # === Section LLM ===
-        llm_frame = ttk.LabelFrame(
-            main_frame, text="LLM pour le nommage des thèmes", padding="10"
-        )
+        llm_frame = ttk.LabelFrame(main_frame, text="LLM pour le nommage des thèmes", padding="10")
         llm_frame.pack(fill=tk.X, pady=(0, 15))
 
         # Provider
@@ -213,9 +211,7 @@ class LLMSettingsDialog(tk.Toplevel):
         self._on_embed_model_change(None)
 
         # === Info matériel ===
-        hw_frame = ttk.LabelFrame(
-            main_frame, text="Matériel détecté", padding="10"
-        )
+        hw_frame = ttk.LabelFrame(main_frame, text="Matériel détecté", padding="10")
         hw_frame.pack(fill=tk.X, pady=(0, 15))
 
         self._setup_hardware_info(hw_frame)
@@ -224,9 +220,7 @@ class LLMSettingsDialog(tk.Toplevel):
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=(10, 0))
 
-        ttk.Button(btn_frame, text="Annuler", command=self.cancel).pack(
-            side=tk.RIGHT, padx=(5, 0)
-        )
+        ttk.Button(btn_frame, text="Annuler", command=self.cancel).pack(side=tk.RIGHT, padx=(5, 0))
         ttk.Button(btn_frame, text="OK", command=self.apply).pack(side=tk.RIGHT)
 
     def _setup_hardware_info(self, parent):

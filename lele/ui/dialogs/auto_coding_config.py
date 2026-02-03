@@ -69,36 +69,20 @@ class AutoCodingConfigDialog(tk.Toplevel):
             self.source_vars[source["id"]] = var
 
         # Segmentation
-        self.segmentation_var = tk.StringVar(
-            value=self.settings.get("segmentation", "paragraph")
-        )
+        self.segmentation_var = tk.StringVar(value=self.settings.get("segmentation", "paragraph"))
 
         # Clustering
-        self.max_themes_var = tk.IntVar(
-            value=self.settings.get("max_themes", 15)
-        )
-        self.min_cluster_var = tk.IntVar(
-            value=self.settings.get("min_cluster_size", 3)
-        )
-        self.confidence_var = tk.DoubleVar(
-            value=self.settings.get("confidence_threshold", 0.6)
-        )
+        self.max_themes_var = tk.IntVar(value=self.settings.get("max_themes", 15))
+        self.min_cluster_var = tk.IntVar(value=self.settings.get("min_cluster_size", 3))
+        self.confidence_var = tk.DoubleVar(value=self.settings.get("confidence_threshold", 0.6))
 
         # LLM
-        self.llm_provider_var = tk.StringVar(
-            value=self.settings.get("llm_provider", "ollama")
-        )
-        self.llm_model_var = tk.StringVar(
-            value=self.settings.get("llm_model", "mistral")
-        )
+        self.llm_provider_var = tk.StringVar(value=self.settings.get("llm_provider", "ollama"))
+        self.llm_model_var = tk.StringVar(value=self.settings.get("llm_model", "mistral"))
 
         # Options
-        self.exclude_coded_var = tk.BooleanVar(
-            value=self.settings.get("exclude_coded", True)
-        )
-        self.merge_similar_var = tk.BooleanVar(
-            value=self.settings.get("merge_similar", True)
-        )
+        self.exclude_coded_var = tk.BooleanVar(value=self.settings.get("exclude_coded", True))
+        self.merge_similar_var = tk.BooleanVar(value=self.settings.get("merge_similar", True))
 
         # État avancé
         self.show_advanced = tk.BooleanVar(value=False)
@@ -111,8 +95,7 @@ class AutoCodingConfigDialog(tk.Toplevel):
         self.main_frame = ttk.Frame(self._canvas, padding="20")
 
         self.main_frame.bind(
-            "<Configure>",
-            lambda e: self._canvas.configure(scrollregion=self._canvas.bbox("all"))
+            "<Configure>", lambda e: self._canvas.configure(scrollregion=self._canvas.bbox("all"))
         )
 
         self._canvas.create_window((0, 0), window=self.main_frame, anchor="nw")
@@ -173,9 +156,7 @@ class AutoCodingConfigDialog(tk.Toplevel):
 
     def _setup_sources_section(self):
         """Configure la section de sélection des sources."""
-        frame = ttk.LabelFrame(
-            self.main_frame, text="Sources à analyser", padding="10"
-        )
+        frame = ttk.LabelFrame(self.main_frame, text="Sources à analyser", padding="10")
         frame.pack(fill=tk.X, pady=(0, 15))
 
         # Liste des sources avec checkboxes
@@ -187,14 +168,11 @@ class AutoCodingConfigDialog(tk.Toplevel):
         if len(self.sources) > max_visible:
             # Créer un canvas scrollable
             canvas = tk.Canvas(sources_container, height=150, highlightthickness=0)
-            scrollbar = ttk.Scrollbar(
-                sources_container, orient="vertical", command=canvas.yview
-            )
+            scrollbar = ttk.Scrollbar(sources_container, orient="vertical", command=canvas.yview)
             sources_frame = ttk.Frame(canvas)
 
             sources_frame.bind(
-                "<Configure>",
-                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+                "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
             )
             canvas.create_window((0, 0), window=sources_frame, anchor="nw")
             canvas.configure(yscrollcommand=scrollbar.set)
@@ -228,12 +206,10 @@ class AutoCodingConfigDialog(tk.Toplevel):
         btn_frame = ttk.Frame(frame)
         btn_frame.pack(fill=tk.X, pady=(10, 0))
 
-        ttk.Button(
-            btn_frame, text="Tout sélectionner", command=self._select_all_sources
-        ).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(
-            btn_frame, text="Aucun", command=self._deselect_all_sources
-        ).pack(side=tk.LEFT)
+        ttk.Button(btn_frame, text="Tout sélectionner", command=self._select_all_sources).pack(
+            side=tk.LEFT, padx=(0, 5)
+        )
+        ttk.Button(btn_frame, text="Aucun", command=self._deselect_all_sources).pack(side=tk.LEFT)
 
         # Compteur
         self.sources_count_label = ttk.Label(
@@ -245,9 +221,7 @@ class AutoCodingConfigDialog(tk.Toplevel):
 
     def _setup_basic_params_section(self):
         """Configure la section des paramètres de base."""
-        frame = ttk.LabelFrame(
-            self.main_frame, text="Paramètres de découpage", padding="10"
-        )
+        frame = ttk.LabelFrame(self.main_frame, text="Paramètres de découpage", padding="10")
         frame.pack(fill=tk.X, pady=(0, 15))
 
         # Granularité
@@ -291,9 +265,7 @@ class AutoCodingConfigDialog(tk.Toplevel):
 
     def _setup_llm_section(self):
         """Configure la section LLM pour le nommage."""
-        frame = ttk.LabelFrame(
-            self.main_frame, text="Nommage des thèmes (LLM)", padding="10"
-        )
+        frame = ttk.LabelFrame(self.main_frame, text="Nommage des thèmes (LLM)", padding="10")
         frame.pack(fill=tk.X, pady=(0, 15))
 
         # Provider
@@ -406,6 +378,7 @@ class AutoCodingConfigDialog(tk.Toplevel):
         # Mettre à jour le label quand le slider change
         def update_conf_label(*args):
             self.conf_label.configure(text=f"{self.confidence_var.get():.2f}")
+
         self.confidence_var.trace_add("write", update_conf_label)
 
         # Options
@@ -423,9 +396,7 @@ class AutoCodingConfigDialog(tk.Toplevel):
 
     def _setup_dependencies_section(self):
         """Configure la section d'état des dépendances."""
-        self.deps_frame = ttk.LabelFrame(
-            self.main_frame, text="État du système", padding="10"
-        )
+        self.deps_frame = ttk.LabelFrame(self.main_frame, text="État du système", padding="10")
         self.deps_frame.pack(fill=tk.X, pady=(0, 15))
 
         self.deps_label = ttk.Label(
@@ -440,13 +411,9 @@ class AutoCodingConfigDialog(tk.Toplevel):
         btn_frame = ttk.Frame(self.main_frame)
         btn_frame.pack(fill=tk.X, pady=(10, 0))
 
-        ttk.Button(btn_frame, text="Annuler", command=self.cancel).pack(
-            side=tk.RIGHT, padx=(5, 0)
-        )
+        ttk.Button(btn_frame, text="Annuler", command=self.cancel).pack(side=tk.RIGHT, padx=(5, 0))
 
-        self.analyze_btn = ttk.Button(
-            btn_frame, text="▶ Analyser", command=self.apply
-        )
+        self.analyze_btn = ttk.Button(btn_frame, text="▶ Analyser", command=self.apply)
         self.analyze_btn.pack(side=tk.RIGHT)
 
     def _check_dependencies(self):
@@ -485,14 +452,10 @@ class AutoCodingConfigDialog(tk.Toplevel):
             # Ollama
             ol = deps["ollama"]
             if ol["available"]:
-                self.ollama_status.configure(
-                    text=f"✅ {ol['message']}", foreground="#228B22"
-                )
+                self.ollama_status.configure(text=f"✅ {ol['message']}", foreground="#228B22")
                 self._refresh_ollama_models()
             else:
-                self.ollama_status.configure(
-                    text=f"⚠️ {ol['message']}", foreground="#CC7000"
-                )
+                self.ollama_status.configure(text=f"⚠️ {ol['message']}", foreground="#CC7000")
 
             self.deps_label.configure(text="\n".join(lines))
 
@@ -555,9 +518,7 @@ class AutoCodingConfigDialog(tk.Toplevel):
     def _update_sources_count(self):
         """Met à jour le compteur de sources."""
         count = sum(1 for var in self.source_vars.values() if var.get())
-        self.sources_count_label.configure(
-            text=f"{count} source(s) sélectionnée(s)"
-        )
+        self.sources_count_label.configure(text=f"{count} source(s) sélectionnée(s)")
 
     def _center_window(self, parent):
         """Centre la fenêtre sur son parent."""
@@ -569,9 +530,7 @@ class AutoCodingConfigDialog(tk.Toplevel):
     def apply(self):
         """Applique la configuration et lance l'analyse."""
         # Récupérer les sources sélectionnées
-        selected_ids = [
-            sid for sid, var in self.source_vars.items() if var.get()
-        ]
+        selected_ids = [sid for sid, var in self.source_vars.items() if var.get()]
 
         if not selected_ids:
             tk.messagebox.showwarning(
@@ -603,18 +562,14 @@ class AutoCodingConfigDialog(tk.Toplevel):
             max_themes=self.max_themes_var.get(),
             min_cluster_size=self.min_cluster_var.get(),
             confidence_threshold=self.confidence_var.get(),
-            llm_provider=provider_map.get(
-                self.llm_provider_var.get(), LLMProvider.LOCAL_OLLAMA
-            ),
+            llm_provider=provider_map.get(self.llm_provider_var.get(), LLMProvider.LOCAL_OLLAMA),
             llm_model=self.llm_model_var.get(),
             exclude_already_coded=self.exclude_coded_var.get(),
             merge_similar_themes=self.merge_similar_var.get(),
         )
 
         # Récupérer les sources complètes
-        self.result_sources = [
-            s for s in self.sources if s["id"] in selected_ids
-        ]
+        self.result_sources = [s for s in self.sources if s["id"] in selected_ids]
 
         self.cancelled = False
         self._cleanup_bindings()

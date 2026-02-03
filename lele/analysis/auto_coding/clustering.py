@@ -130,9 +130,7 @@ class ClusteringPipeline:
         cluster_data: dict[int, dict] = {}
         noise_segments: list[Segment] = []
 
-        for i, (segment, label, prob) in enumerate(
-            zip(valid_segments, labels, probabilities)
-        ):
+        for i, (segment, label, prob) in enumerate(zip(valid_segments, labels, probabilities)):
             if label == -1:  # Bruit
                 noise_segments.append(segment)
             else:
@@ -367,6 +365,7 @@ def check_clustering_dependencies() -> tuple[bool, str]:
         # hdbscan n'a pas toujours __version__, utiliser importlib.metadata
         try:
             from importlib.metadata import version
+
             hdbscan_version = version("hdbscan")
         except Exception:
             hdbscan_version = "installed"

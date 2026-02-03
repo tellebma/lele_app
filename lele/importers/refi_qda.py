@@ -123,27 +123,35 @@ class RefiQdaImporter(BaseImporter):
                 info["modified"] = project_elem.get("modifiedDateTime", "")
 
                 # Sources
-                for source in root.findall(".//Source", ns) or root.findall(".//Sources/Source", ns):
-                    info["sources"].append({
-                        "guid": source.get("guid", ""),
-                        "name": source.get("name", ""),
-                        "type": source.get("type", ""),
-                    })
+                for source in root.findall(".//Source", ns) or root.findall(
+                    ".//Sources/Source", ns
+                ):
+                    info["sources"].append(
+                        {
+                            "guid": source.get("guid", ""),
+                            "name": source.get("name", ""),
+                            "type": source.get("type", ""),
+                        }
+                    )
 
                 # Codes
                 for code in root.findall(".//Code", ns) or root.findall(".//Codes/Code", ns):
-                    info["codes"].append({
-                        "guid": code.get("guid", ""),
-                        "name": code.get("name", ""),
-                        "color": code.get("color", ""),
-                    })
+                    info["codes"].append(
+                        {
+                            "guid": code.get("guid", ""),
+                            "name": code.get("name", ""),
+                            "color": code.get("color", ""),
+                        }
+                    )
 
                 # Utilisateurs
                 for user in root.findall(".//User", ns) or root.findall(".//Users/User", ns):
-                    info["users"].append({
-                        "guid": user.get("guid", ""),
-                        "name": user.get("name", ""),
-                    })
+                    info["users"].append(
+                        {
+                            "guid": user.get("guid", ""),
+                            "name": user.get("name", ""),
+                        }
+                    )
 
         return info
 
@@ -151,7 +159,7 @@ class RefiQdaImporter(BaseImporter):
         """Extrait les namespaces du document XML."""
         ns = {}
         if root.tag.startswith("{"):
-            ns_uri = root.tag[1:root.tag.index("}")]
+            ns_uri = root.tag[1 : root.tag.index("}")]
             ns[""] = ns_uri
         return ns
 

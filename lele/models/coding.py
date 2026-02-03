@@ -128,9 +128,7 @@ class CodeReference:
         return [cls.from_row(dict(row)) for row in cursor.fetchall()]
 
     @classmethod
-    def get_by_source_and_node(
-        cls, db, source_id: str, node_id: str
-    ) -> list["CodeReference"]:
+    def get_by_source_and_node(cls, db, source_id: str, node_id: str) -> list["CodeReference"]:
         """Récupère les références pour une source et un nœud spécifiques."""
         cursor = db.execute(
             """
@@ -153,9 +151,7 @@ class CodeReference:
     @classmethod
     def count_by_node(cls, db, node_id: str) -> int:
         """Compte le nombre de références pour un nœud."""
-        cursor = db.execute(
-            "SELECT COUNT(*) FROM code_references WHERE node_id = ?", (node_id,)
-        )
+        cursor = db.execute("SELECT COUNT(*) FROM code_references WHERE node_id = ?", (node_id,))
         return cursor.fetchone()[0]
 
     @classmethod

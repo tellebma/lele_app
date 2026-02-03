@@ -105,16 +105,14 @@ class Node:
         Optimisé avec une seule requête JOIN pour éviter le problème N+1.
         """
         if parent_id is None:
-            cursor = db.execute(
-                """
+            cursor = db.execute("""
                 SELECT n.*, COUNT(cr.id) as ref_count
                 FROM nodes n
                 LEFT JOIN code_references cr ON n.id = cr.node_id
                 WHERE n.parent_id IS NULL
                 GROUP BY n.id
                 ORDER BY n.name
-                """
-            )
+                """)
         else:
             cursor = db.execute(
                 """

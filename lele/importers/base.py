@@ -69,9 +69,7 @@ class BaseImporter(ABC):
             return False, f"Ce n'est pas un fichier: {file_path}"
         return True, ""
 
-    def copy_to_project(
-        self, source_path: Path, project_files_path: Path
-    ) -> Path:
+    def copy_to_project(self, source_path: Path, project_files_path: Path) -> Path:
         """Copie un fichier dans le dossier du projet."""
         import shutil
 

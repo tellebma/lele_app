@@ -150,9 +150,7 @@ class ImageImporter(BaseImporter):
                 "pip install pytesseract && sudo apt-get install tesseract-ocr"
             )
 
-    def create_thumbnail(
-        self, source: Source, size: tuple[int, int] = (200, 200)
-    ) -> Optional[str]:
+    def create_thumbnail(self, source: Source, size: tuple[int, int] = (200, 200)) -> Optional[str]:
         """Crée une miniature de l'image."""
         if not source.file_path:
             return None

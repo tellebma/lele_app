@@ -130,9 +130,7 @@ class AutoCodingPreviewDialog(tk.Toplevel):
         self.proposals_tree.column("status", width=100, anchor=tk.CENTER)
 
         # Scrollbar
-        scrollbar = ttk.Scrollbar(
-            list_frame, orient=tk.VERTICAL, command=self.proposals_tree.yview
-        )
+        scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.proposals_tree.yview)
         self.proposals_tree.configure(yscrollcommand=scrollbar.set)
 
         self.proposals_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -146,17 +144,17 @@ class AutoCodingPreviewDialog(tk.Toplevel):
         btn_frame = ttk.Frame(parent)
         btn_frame.pack(fill=tk.X, pady=(10, 0))
 
-        ttk.Button(
-            btn_frame, text="✓ Tout", width=8, command=self._select_all
-        ).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(btn_frame, text="✓ Tout", width=8, command=self._select_all).pack(
+            side=tk.LEFT, padx=(0, 5)
+        )
 
-        ttk.Button(
-            btn_frame, text="✗ Aucun", width=8, command=self._deselect_all
-        ).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(btn_frame, text="✗ Aucun", width=8, command=self._deselect_all).pack(
+            side=tk.LEFT, padx=(0, 5)
+        )
 
-        ttk.Button(
-            btn_frame, text="✏ Renommer", width=10, command=self._rename_selected
-        ).pack(side=tk.LEFT)
+        ttk.Button(btn_frame, text="✏ Renommer", width=10, command=self._rename_selected).pack(
+            side=tk.LEFT
+        )
 
     def _setup_details_panel(self, parent):
         """Configure le panneau de détails."""
@@ -235,15 +233,9 @@ class AutoCodingPreviewDialog(tk.Toplevel):
         seg_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Tags pour le formatage
-        self.segments_text.tag_configure(
-            "source", foreground="#888888", font=("", 8)
-        )
-        self.segments_text.tag_configure(
-            "text", font=("", 9)
-        )
-        self.segments_text.tag_configure(
-            "separator", foreground="#cccccc"
-        )
+        self.segments_text.tag_configure("source", foreground="#888888", font=("", 8))
+        self.segments_text.tag_configure("text", font=("", 9))
+        self.segments_text.tag_configure("separator", foreground="#cccccc")
 
     def _setup_footer(self):
         """Configure le footer avec les boutons."""
@@ -259,13 +251,9 @@ class AutoCodingPreviewDialog(tk.Toplevel):
         self.summary_label.pack(side=tk.LEFT)
 
         # Boutons
-        ttk.Button(
-            footer, text="Annuler", command=self.cancel
-        ).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Button(footer, text="Annuler", command=self.cancel).pack(side=tk.RIGHT, padx=(5, 0))
 
-        self.apply_btn = ttk.Button(
-            footer, text="✓ Appliquer", command=self.apply
-        )
+        self.apply_btn = ttk.Button(footer, text="✓ Appliquer", command=self.apply)
         self.apply_btn.pack(side=tk.RIGHT)
 
         self._update_summary()
@@ -330,9 +318,7 @@ class AutoCodingPreviewDialog(tk.Toplevel):
         if not item:
             return
 
-        proposal = next(
-            (p for p in self.result.proposals if p.id == item), None
-        )
+        proposal = next((p for p in self.result.proposals if p.id == item), None)
         if proposal:
             proposal.is_selected = not proposal.is_selected
             self._update_proposal_display(proposal)
@@ -353,8 +339,8 @@ class AutoCodingPreviewDialog(tk.Toplevel):
         # Nœud existant
         if proposal.has_existing_match:
             self.existing_label.configure(
-                text=f"⚠️ Similaire au nœud existant \"{proposal.existing_node_name}\" "
-                     f"({proposal.similarity_to_existing:.0%})"
+                text=f'⚠️ Similaire au nœud existant "{proposal.existing_node_name}" '
+                f"({proposal.similarity_to_existing:.0%})"
             )
             self.existing_frame.pack(fill=tk.X, pady=(0, 10))
         else:
@@ -369,9 +355,7 @@ class AutoCodingPreviewDialog(tk.Toplevel):
                 self.segments_text.insert(tk.END, "\n" + "─" * 40 + "\n", "separator")
 
             # Source
-            self.segments_text.insert(
-                tk.END, f"📄 {segment.source_name}\n", "source"
-            )
+            self.segments_text.insert(tk.END, f"📄 {segment.source_name}\n", "source")
 
             # Texte
             self.segments_text.insert(tk.END, segment.text + "\n", "text")
@@ -508,9 +492,7 @@ class AutoCodingProgressDialog(tk.Toplevel):
         self.status_label.pack(anchor=tk.W, pady=(10, 5))
 
         # Barre de progression
-        self.progress = ttk.Progressbar(
-            main_frame, mode="determinate", maximum=100
-        )
+        self.progress = ttk.Progressbar(main_frame, mode="determinate", maximum=100)
         self.progress.pack(fill=tk.X, pady=(5, 10))
 
         # Détails
@@ -523,9 +505,7 @@ class AutoCodingProgressDialog(tk.Toplevel):
         self.details_label.pack(anchor=tk.W)
 
         # Bouton Annuler
-        self.cancel_btn = ttk.Button(
-            main_frame, text="Annuler", command=self._on_cancel
-        )
+        self.cancel_btn = ttk.Button(main_frame, text="Annuler", command=self._on_cancel)
         self.cancel_btn.pack(side=tk.BOTTOM, anchor=tk.E)
 
     def update_progress(self, progress: float, message: str):

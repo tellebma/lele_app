@@ -166,8 +166,7 @@ class TextImporter(BaseImporter):
 
         except ImportError:
             raise ImportError(
-                "Installez python-docx pour lire les fichiers Word: "
-                "pip install python-docx"
+                "Installez python-docx pour lire les fichiers Word: " "pip install python-docx"
             )
 
     def _extract_doc(self, file_path: Path) -> tuple[str, dict]:
@@ -211,10 +210,7 @@ class TextImporter(BaseImporter):
 
             doc = load(str(file_path))
             paragraphs = doc.getElementsByType(odf_text.P)
-            content = "\n\n".join(
-                "".join(str(node) for node in p.childNodes)
-                for p in paragraphs
-            )
+            content = "\n\n".join("".join(str(node) for node in p.childNodes) for p in paragraphs)
             return content, {"paragraph_count": len(paragraphs)}
 
         except ImportError:

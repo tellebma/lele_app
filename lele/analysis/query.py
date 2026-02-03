@@ -71,18 +71,14 @@ class QueryBuilder:
         else:
             return []
 
-    def _coding_and_query(
-        self, node_ids: list[str], scope: str
-    ) -> list[QueryResult]:
+    def _coding_and_query(self, node_ids: list[str], scope: str) -> list[QueryResult]:
         """Trouve les sources/passages codés avec TOUS les nœuds."""
         results = []
 
         # Trouver les sources qui ont des codages pour tous les nœuds
         if scope == "source":
             # Pour chaque source, vérifier qu'elle a tous les nœuds
-            cursor = self.db.execute(
-                "SELECT DISTINCT source_id FROM code_references"
-            )
+            cursor = self.db.execute("SELECT DISTINCT source_id FROM code_references")
             source_ids = [row["source_id"] for row in cursor.fetchall()]
 
             for source_id in source_ids:
@@ -90,9 +86,7 @@ class QueryBuilder:
                 all_nodes_present = True
 
                 for node_id in node_ids:
-                    refs = CodeReference.get_by_source_and_node(
-                        self.db, source_id, node_id
-                    )
+                    refs = CodeReference.get_by_source_and_node(self.db, source_id, node_id)
                     if refs:
                         refs_by_node[node_id] = refs
                     else:
@@ -117,9 +111,7 @@ class QueryBuilder:
 
         return results
 
-    def _coding_or_query(
-        self, node_ids: list[str], scope: str
-    ) -> list[QueryResult]:
+    def _coding_or_query(self, node_ids: list[str], scope: str) -> list[QueryResult]:
         """Trouve les sources/passages codés avec AU MOINS UN nœud."""
         results = []
         seen_sources = set()
@@ -132,9 +124,7 @@ class QueryBuilder:
                     if source:
                         all_refs = CodeReference.get_by_source(self.db, source.id)
                         # Filtrer pour ne garder que les nœuds demandés
-                        filtered_refs = [
-                            r for r in all_refs if r.node_id in node_ids
-                        ]
+                        filtered_refs = [r for r in all_refs if r.node_id in node_ids]
 
                         results.append(
                             QueryResult(
@@ -148,9 +138,7 @@ class QueryBuilder:
 
         return results
 
-    def _coding_not_query(
-        self, node_ids: list[str], scope: str
-    ) -> list[QueryResult]:
+    def _coding_not_query(self, node_ids: list[str], scope: str) -> list[QueryResult]:
         """Trouve les sources qui N'ONT PAS les nœuds spécifiés."""
         results = []
 
@@ -160,9 +148,7 @@ class QueryBuilder:
         for source in all_sources:
             has_excluded_node = False
             for node_id in node_ids:
-                refs = CodeReference.get_by_source_and_node(
-                    self.db, source.id, node_id
-                )
+                refs = CodeReference.get_by_source_and_node(self.db, source.id, node_id)
                 if refs:
                     has_excluded_node = True
                     break
@@ -335,17 +321,13 @@ class QueryBuilder:
             # Compter pour le groupe 1
             count1 = 0
             for source_id in group1_sources:
-                refs = CodeReference.get_by_source_and_node(
-                    self.db, source_id, node_id
-                )
+                refs = CodeReference.get_by_source_and_node(self.db, source_id, node_id)
                 count1 += len(refs)
 
             # Compter pour le groupe 2
             count2 = 0
             for source_id in group2_sources:
-                refs = CodeReference.get_by_source_and_node(
-                    self.db, source_id, node_id
-                )
+                refs = CodeReference.get_by_source_and_node(self.db, source_id, node_id)
                 count2 += len(refs)
 
             comparison["group1"][node.name] = count1

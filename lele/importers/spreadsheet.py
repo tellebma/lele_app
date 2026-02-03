@@ -47,9 +47,7 @@ class SpreadsheetImporter(BaseImporter):
             if ext == ".csv":
                 content, sheet_meta = self._read_csv(file_path, header_row)
             else:
-                content, sheet_meta = self._read_excel(
-                    file_path, sheet_name, header_row
-                )
+                content, sheet_meta = self._read_excel(file_path, sheet_name, header_row)
 
             extra_metadata.update(sheet_meta)
 
@@ -108,7 +106,7 @@ class SpreadsheetImporter(BaseImporter):
 
             if header_row < len(rows):
                 headers = rows[header_row]
-                data_rows = rows[header_row + 1:]
+                data_rows = rows[header_row + 1 :]
             else:
                 headers = []
                 data_rows = rows
@@ -141,9 +139,7 @@ class SpreadsheetImporter(BaseImporter):
                 df = pd.read_excel(file_path, sheet_name=sheet_name, header=header_row)
                 sheets_data = {sheet_name: df}
             else:
-                sheets_data = pd.read_excel(
-                    file_path, sheet_name=None, header=header_row
-                )
+                sheets_data = pd.read_excel(file_path, sheet_name=None, header=header_row)
 
             content_parts = []
             sheets_info = {}

@@ -22,6 +22,7 @@ _system_info: Optional["SystemInfo"] = None
 @dataclass
 class GPUInfo:
     """Informations sur un GPU."""
+
     name: str
     memory_total_mb: int = 0
     memory_free_mb: int = 0
@@ -32,6 +33,7 @@ class GPUInfo:
 @dataclass
 class SystemInfo:
     """Informations système complètes."""
+
     # OS
     os_name: str = ""
     os_version: str = ""
@@ -94,9 +96,10 @@ def get_system_info(force_refresh: bool = False) -> SystemInfo:
     # RAM
     try:
         import psutil
+
         mem = psutil.virtual_memory()
-        info.ram_total_gb = mem.total / (1024 ** 3)
-        info.ram_available_gb = mem.available / (1024 ** 3)
+        info.ram_total_gb = mem.total / (1024**3)
+        info.ram_available_gb = mem.available / (1024**3)
     except ImportError:
         logger.debug("psutil non disponible - infos RAM limitées")
 
@@ -117,8 +120,11 @@ def _detect_nvidia_gpu(info: SystemInfo) -> None:
     """Détecte les GPU NVIDIA via nvidia-smi."""
     try:
         result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name,memory.total,memory.free,driver_version",
-             "--format=csv,noheader,nounits"],
+            [
+                "nvidia-smi",
+                "--query-gpu=name,memory.total,memory.free,driver_version",
+                "--format=csv,noheader,nounits",
+            ],
             capture_output=True,
             text=True,
             timeout=5,

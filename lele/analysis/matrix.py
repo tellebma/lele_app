@@ -65,9 +65,7 @@ class MatrixAnalysis:
             row = []
 
             for source in sources:
-                refs = CodeReference.get_by_source_and_node(
-                    self.db, source.id, node.id
-                )
+                refs = CodeReference.get_by_source_and_node(self.db, source.id, node.id)
 
                 if measure == "count":
                     value = len(refs)
@@ -76,10 +74,7 @@ class MatrixAnalysis:
                 elif measure == "percentage":
                     # Pourcentage du contenu codé
                     if source.content and refs:
-                        total_coded = sum(
-                            (r.end_pos or 0) - (r.start_pos or 0)
-                            for r in refs
-                        )
+                        total_coded = sum((r.end_pos or 0) - (r.start_pos or 0) for r in refs)
                         value = (total_coded / len(source.content)) * 100
                     else:
                         value = 0
@@ -191,9 +186,7 @@ class MatrixAnalysis:
                 # Compter les codages pour ce nœud dans les sources liées
                 count = 0
                 for source_id in source_ids:
-                    refs = CodeReference.get_by_source_and_node(
-                        self.db, source_id, node.id
-                    )
+                    refs = CodeReference.get_by_source_and_node(self.db, source_id, node.id)
                     count += len(refs)
                 row.append(count)
             matrix.append(row)
@@ -262,9 +255,7 @@ class MatrixAnalysis:
                 # Compter les codages pour ce nœud dans les sources des cas
                 count = 0
                 for source_id in all_source_ids:
-                    refs = CodeReference.get_by_source_and_node(
-                        self.db, source_id, node.id
-                    )
+                    refs = CodeReference.get_by_source_and_node(self.db, source_id, node.id)
                     count += len(refs)
                 row.append(count)
             matrix.append(row)
@@ -296,24 +287,28 @@ class MatrixAnalysis:
         # Statistiques par ligne
         row_stats = []
         for row in matrix:
-            row_stats.append({
-                "sum": sum(row),
-                "mean": statistics.mean(row) if row else 0,
-                "max": max(row) if row else 0,
-                "min": min(row) if row else 0,
-            })
+            row_stats.append(
+                {
+                    "sum": sum(row),
+                    "mean": statistics.mean(row) if row else 0,
+                    "max": max(row) if row else 0,
+                    "min": min(row) if row else 0,
+                }
+            )
 
         # Statistiques par colonne
         n_cols = len(matrix[0]) if matrix else 0
         col_stats = []
         for j in range(n_cols):
             col = [matrix[i][j] for i in range(len(matrix))]
-            col_stats.append({
-                "sum": sum(col),
-                "mean": statistics.mean(col) if col else 0,
-                "max": max(col) if col else 0,
-                "min": min(col) if col else 0,
-            })
+            col_stats.append(
+                {
+                    "sum": sum(col),
+                    "mean": statistics.mean(col) if col else 0,
+                    "max": max(col) if col else 0,
+                    "min": min(col) if col else 0,
+                }
+            )
 
         # Statistiques globales
         all_values = [v for row in matrix for v in row]

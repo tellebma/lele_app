@@ -14,20 +14,20 @@ from typing import Optional
 class SegmentationStrategy(Enum):
     """Stratégie de segmentation du texte."""
 
-    PARAGRAPH = "paragraph"      # Découpe par \n\n
-    SENTENCE = "sentence"        # Découpe phrase par phrase
-    SEMANTIC = "semantic"        # Découpe par cohérence sémantique (avancé)
-    FIXED_WINDOW = "window"      # Fenêtre glissante (N tokens)
+    PARAGRAPH = "paragraph"  # Découpe par \n\n
+    SENTENCE = "sentence"  # Découpe phrase par phrase
+    SEMANTIC = "semantic"  # Découpe par cohérence sémantique (avancé)
+    FIXED_WINDOW = "window"  # Fenêtre glissante (N tokens)
 
 
 class LLMProvider(Enum):
     """Fournisseur de LLM pour le labeling."""
 
-    LOCAL_OLLAMA = "ollama"           # Ollama (Mistral, Llama, etc.)
-    LOCAL_LLAMACPP = "llamacpp"       # llama.cpp directement
-    API_ANTHROPIC = "anthropic"       # Claude API
-    API_OPENAI = "openai"             # OpenAI API
-    NONE = "none"                     # Labeling par mots-clés uniquement
+    LOCAL_OLLAMA = "ollama"  # Ollama (Mistral, Llama, etc.)
+    LOCAL_LLAMACPP = "llamacpp"  # llama.cpp directement
+    API_ANTHROPIC = "anthropic"  # Claude API
+    API_OPENAI = "openai"  # OpenAI API
+    NONE = "none"  # Labeling par mots-clés uniquement
 
 
 @dataclass

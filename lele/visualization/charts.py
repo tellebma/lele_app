@@ -161,9 +161,7 @@ class ChartGenerator:
             return None
 
         # Récupérer les codages avec dates
-        cursor = self.db.execute(
-            "SELECT created_at FROM code_references ORDER BY created_at"
-        )
+        cursor = self.db.execute("SELECT created_at FROM code_references ORDER BY created_at")
         dates = []
         for row in cursor.fetchall():
             try:
